@@ -2,10 +2,7 @@ import numpy as np
 
 from scipy.ndimage import measurements
 
-from skimage.measure import regionprops
 from skimage.transform import rotate
-from skimage.util import pad
-from skimage.morphology import binary_closing, binary_dilation
 
 from .morphology import SE2, SE3, EIGHT, bwmorph_thin
 
