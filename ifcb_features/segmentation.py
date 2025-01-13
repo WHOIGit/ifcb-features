@@ -6,8 +6,8 @@ from skimage.morphology import binary_closing, binary_dilation, binary_erosion, 
 import skimage.filters as imfilters
 from sklearn.cluster import KMeans
 
-from phasecong import phasecong_Mm
-from morphology import SE3, hysthresh, bwmorph_thin
+from .phasecong import phasecong_Mm
+from .morphology import SE3, hysthresh, bwmorph_thin
 
 SE2 = diamond(2, np.bool)
 SED = diamond(1, np.bool)
