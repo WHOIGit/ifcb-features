@@ -30,7 +30,8 @@ dependencies = [
     "scikit-image",
     "phasepack",
     "pyfftw",
-    "scikit-learn"
+    "scikit-learn",
+    "pyifcb @ git+https://github.com/joefutrelle/pyifcb@v1.2.1"
 ]
 
 [project.urls]
@@ -45,3 +46,6 @@ packages = ["ifcb_features"]
 include = [
     "/ifcb_features",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
