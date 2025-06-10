@@ -8,10 +8,10 @@ import numpy as np
 import io
 import zipfile
 import time
-import imageio
+from PIL import Image
 import traceback
 
-def extract_and_save_all_features(data_directory, output_directory):
+def extract_and_save_all_features(data_directory, output_directory, bins=None):
     """
     Extracts slim features from IFCB images in the given directory
     and saves them to a CSV file.
@@ -19,6 +19,8 @@ def extract_and_save_all_features(data_directory, output_directory):
     Args:
         data_directory (str): Path to the directory containing IFCB data.
         output_directory (str): Path to the directory where the CSV file will be saved.
+        bins (list, optional): A list of bin names (e.g., 'D20240423T115846_IFCB127') to process.
+            If None, all bins in the data directory are processed. Defaults to None.
     """
     try:
         data_dir = DataDirectory(data_directory)
@@ -41,7 +43,22 @@ def extract_and_save_all_features(data_directory, output_directory):
     all_features_data = []
     blobs_data = {}
 
-    for sample in data_dir:
+    samples_to_process = []
+    if bins:
+        for bin_name in bins:
+            try:
+                sample = data_dir[bin_name]
+                samples_to_process.append(sample)
+            except KeyError:
+                print(f"Warning: Bin '{bin_name}' not found in data directory. Skipping.")
+            except Exception as e:
+                print(f"Error accessing bin '{bin_name}': {e}")
+                traceback.print_exc()
+    else:
+        for sample in data_dir:
+            samples_to_process.append(sample)
+
+    for sample in samples_to_process:
         print(f"Processing sample: {sample}, {len(sample.images)} ROIs")
         for number, image in sample.images.items():
             try:
@@ -60,10 +77,13 @@ def extract_and_save_all_features(data_directory, output_directory):
                 if blobs:
                     blobs_data_sample = {}
                     for i, blob in enumerate(blobs):
-                        blob_image = (blob.image > 0).astype(np.uint8)
+                        # Convert blob.image (0/1) to 0/255 for PIL to convert to "1" mode
+                        blob_image_pil_compatible = (blob.image > 0).astype(np.uint8) * 255
                         img_buffer = io.BytesIO()
                         try:
-                            imageio.imwrite(img_buffer, blob_image, format="png")
+                            # Create a PIL Image and convert it to 1-bit mode ('1')
+                            pil_image = Image.fromarray(blob_image_pil_compatible).convert("1")
+                            pil_image.save(img_buffer, format="PNG")
                         except Exception as e:
                             print(f"Error saving blob {i} of ROI {number} in sample {sample.pid}: {e}")
                             traceback.print_exc()
@@ -93,11 +113,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract various ROI features and save blobs as 1-bit PNGs.")
     parser.add_argument("data_directory", help="Path to the directory containing IFCB data.")
     parser.add_argument("output_directory", help="Path to the directory to save the output CSV file and blobs.")
+    parser.add_argument("--bins", nargs='+', help="List of bin names to process (space-separated). If not provided, all bins are processed.")
 
     args = parser.parse_args()
 
     beginning = time.time()
-    extract_and_save_all_features(args.data_directory, args.output_directory)
+    extract_and_save_all_features(args.data_directory, args.output_directory, args.bins)
     elapsed = time.time() - beginning
 
     print(f'Total extract time: {elapsed:.2f} seconds')
