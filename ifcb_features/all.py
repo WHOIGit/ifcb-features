@@ -49,7 +49,7 @@ class BlobFeatures(object):
     @lru_cache()
     def area(self):
         """area of blob"""
-        return self.regionprops.area
+        return int(self.regionprops.area)
     @property
     @lru_cache()
     def equiv_diameter(self):
@@ -471,9 +471,6 @@ def compute_features(roi_image, blobs_image=None, raw_stitch=None):
     f = []
     f += [
         ('Area', b.area),
-        ('B180', b.b180),
-        ('B90', b.b90),
-        ('Bflip', b.bflip),
         ('Biovolume', b.biovolume),
         ('BoundingBox_xwidth', b.bbox_xwidth),
         ('BoundingBox_ywidth', b.bbox_ywidth),
@@ -482,30 +479,18 @@ def compute_features(roi_image, blobs_image=None, raw_stitch=None):
         ('Eccentricity', b.eccentricity),
         ('EquivDiameter', b.equiv_diameter),
         ('Extent', b.extent),
-        ('H180', b.h180),
-        ('H90', b.h90),
-        ('Hflip', b.hflip),
         ('MajorAxisLength', b.major_axis_length),
         ('MinorAxisLength', b.minor_axis_length),
         ('Orientation', b.orientation),
         ('Perimeter', b.perimeter),
-        ('RWcenter2total_powerratio', r.rw_power_ratio),
-        ('RWhalfpowerintegral', r.rw_power_integral),
         ('RepresentativeWidth', b.representative_width),
-        ('RotatedBoundingBox_xwidth', b.rotated_bbox_xwidth),
-        ('RotatedBoundingBox_ywidth', b.rotated_bbox_ywidth),
         ('Solidity', b.solidity),
         ('SurfaceArea', b.surface_area),
         ('maxFeretDiameter', b.max_feret_diameter),
         ('minFeretDiameter', b.min_feret_diameter)
     ]
-    f += get_multifeature('moment_invariant%d', r.invmoments)
     f += [
         ('numBlobs', r.num_blobs),
-        ('shapehist_kurtosis_normEqD', b.perimeter_kurtosis),
-        ('shapehist_mean_normEqD', b.perimeter_mean),
-        ('shapehist_median_normEqD', b.perimeter_median),
-        ('shapehist_skewness_normEqD', b.perimeter_skewness),
         ('summedArea', r.summed_area),
         ('summedBiovolume', r.summed_biovolume),
         ('summedConvexArea', r.summed_convex_area),
@@ -514,23 +499,10 @@ def compute_features(roi_image, blobs_image=None, raw_stitch=None):
         ('summedMinorAxisLength', r.summed_minor_axis_length),
         ('summedPerimeter', r.summed_perimeter),
         ('summedSurfaceArea', r.summed_surface_area),
-        ('texture_average_contrast', r.texture_average_contrast),
-        ('texture_average_gray_level', r.texture_average_gray_level),
-        ('texture_entropy', r.texture_entropy),
-        ('texture_smoothness', r.texture_smoothness),
-        ('texture_third_moment', r.texture_third_moment),
-        ('texture_uniformity', r.texture_uniformity)
     ]
-    f += get_multifeature('Wedge%02d', r.wedge)
-    f += get_multifeature('Ring%02d', r.ring)
-    f += get_multifeature('HOG%02d', r.hog)
     f += [
         ('Area_over_PerimeterSquared', b.area_over_perimeter_squared),
         ('Area_over_Perimeter', b.area_over_perimeter),
-        ('H90_over_Hflip', b.h90_over_hflip),
-        ('H90_over_H180', b.h90_over_h180),
-        ('Hflip_over_H180', b.hflip_over_h180),
         ('summedConvexPerimeter_over_Perimeter', r.summed_convex_perimeter_over_perimeter),
-        ('rotated_BoundingBox_solidity', b.rotated_bbox_solidity)
     ]
     return (r.blobs_image, f)
