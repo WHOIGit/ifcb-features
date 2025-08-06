@@ -93,7 +93,6 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None):
         features_output_filename = os.path.join(output_directory, f"{sample.lid}_features_v4.csv")
         blobs_output_filename = os.path.join(output_directory, f"{sample.lid}_blobs.zip")
         for number, image in sample.images.items():
-            print(f"Processing sample {sample.lid}, ROI {number}...")
             features = {
                 'roi_number': number,
             }
@@ -112,18 +111,12 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None):
         if all_features:
             df = pd.DataFrame.from_records(all_features, columns=['roi_number'] + FEATURE_COLUMNS)
             df.to_csv(features_output_filename, index=False)
-            print(f"\nAll features saved to: {features_output_filename}")
-        else:
-            print("\nNo features were extracted.")
         
         if all_blobs:
             with zipfile.ZipFile(blobs_output_filename, 'w') as zf:
                 for roi_number, blob_data in all_blobs.items():
                     filename = f"{sample.lid}_{roi_number:05d}.png"
                     zf.writestr(filename, blob_data)
-            print(f"Blobs saved as 1-bit PNGs (using scikit-image) in: {blobs_output_filename}")
-        else:
-            print("No blobs were segmented to save.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract various ROI features and save blobs as 1-bit PNGs.")
