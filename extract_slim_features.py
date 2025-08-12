@@ -110,7 +110,7 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None):
 
         if all_features:
             df = pd.DataFrame.from_records(all_features, columns=['roi_number'] + FEATURE_COLUMNS)
-            df.to_csv(features_output_filename, index=False)
+            df.to_csv(features_output_filename, index=False, float_format='%.8f')
         
         if all_blobs:
             with zipfile.ZipFile(blobs_output_filename, 'w') as zf:
