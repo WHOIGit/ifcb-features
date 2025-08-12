@@ -1,22 +1,23 @@
 import numpy as np
 
 from skimage import img_as_float32
-from scipy.ndimage import binary_fill_holes
+from scipy.ndimage.morphology import binary_fill_holes
 from skimage.morphology import binary_closing, binary_dilation, binary_erosion, remove_small_objects, diamond
 import skimage.filters as imfilters
 from sklearn.cluster import KMeans
 
-from .phasecong import phasecong_Mm
-from .morphology import SE3, hysthresh, bwmorph_thin
+from skimage.util import img_as_ubyte
 
-SE2 = diamond(2, np.bool)
-SED = diamond(1, np.bool)
+from .phasecong import phasecong_Mm
+from .morphology import SE3, hysthresh, bwmorph_thin, EIGHT
+
+SE2 = diamond(2)
+SED = diamond(1)
 
 # parameters
 HT_T1, HT_T2 = 0.3, 0.09
 BLOB_MIN = 40
 DARK_THRESHOLD_ADJUSTMENT = 0.75
-
 
 def kmeans_segment(roi):
     r = img_as_float32(roi)
@@ -40,7 +41,6 @@ def kmeans_segment(roi):
 def apply_blob_min(roi):
     return remove_small_objects(roi, BLOB_MIN + 1, connectivity=2)
 
-
 def segment_roi(roi, raw_stitch=None):
     # step 1. phase congruency (edge detection)
     Mm = phasecong_Mm(roi)
@@ -57,7 +57,8 @@ def segment_roi(roi, raw_stitch=None):
     B[0,B[1,:]==0]=0
     B[-1,B[-2,:]==0]=0
     # step 4. binary closing
-    B = binary_closing(B, SE2)
+    padded = np.pad(B, 2)
+    B = binary_closing(padded, SE2)[2:-2,2:-2]
     # step 5. morphological thinning
     B = bwmorph_thin(B, 3)
     # step 6. background/foreground thresholding
@@ -71,4 +72,3 @@ def segment_roi(roi, raw_stitch=None):
         B = B_eroded
     B = apply_blob_min(B)
     return B
-
