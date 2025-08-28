@@ -30,7 +30,8 @@ dependencies = [
     "scikit-image",
     "phasepack @ git+https://github.com/WHOIGit/phasepack@v1.6.1",
     "scikit-learn",
-    "pyifcb @ git+https://github.com/joefutrelle/pyifcb@v1.2.1"
+    "pyifcb @ git+https://github.com/joefutrelle/pyifcb@v1.2.1",
+    "tqdm"
 ]
 
 [project.urls]

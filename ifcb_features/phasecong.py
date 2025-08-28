@@ -81,7 +81,11 @@ def phasecong_Mm(roi):
         # Single ROI - add batch dimension, process, then remove batch dimension
         roi_batch = roi[None, :, :]  # Shape: [1, H, W]
         result_batch = phasecong_Mm_batch(roi_batch)
-        return result_batch[0]  # Remove batch dimension, return [H, W]
+        # Check if batch dimension still exists before trying to remove it
+        if result_batch.ndim == 3:
+            return result_batch[0]  # Remove batch dimension, return [H, W]
+        else:
+            return result_batch  # Already 2D, return as is
     elif roi.ndim == 3:
         # Already batched - process directly
         return phasecong_Mm_batch(roi)

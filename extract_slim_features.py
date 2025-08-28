@@ -10,6 +10,7 @@ import zipfile
 import time
 from PIL import Image
 import traceback
+from tqdm import tqdm
 
 from ifcb_features.all import compute_features
 from ifcb_features.batch_processing import BatchedFeatureExtractor
@@ -114,7 +115,7 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None,
         for sample in data_dir:
             samples_to_process.append(sample)
 
-    for sample in samples_to_process:
+    for i, sample in enumerate(tqdm(samples_to_process, desc="Processing samples")):
         print(f"Processing sample: {sample.lid}")
         features_output_filename = os.path.join(output_directory, f"{sample.lid}_features_v4.csv")
         blobs_output_filename = os.path.join(output_directory, f"{sample.lid}_blobs.zip")
@@ -138,7 +139,9 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None,
                 all_features = []
                 all_blobs = {}
                 with sample:  # Open ROI file
-                    for number, image in sample.images.items():
+                    # Add progress bar for individual ROI processing
+                    roi_items = list(sample.images.items())
+                    for number, image in tqdm(roi_items, desc=f"Processing ROIs (individual)", leave=False):
                         features = {
                             'roi_number': number,
                         }
@@ -169,6 +172,7 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None,
             print(f"Error processing sample {sample.pid}: {e}")
             traceback.print_exc()
             continue
+        
     
     # Print performance statistics if using batch processing
     if batch_processing and batch_extractor:
@@ -179,6 +183,10 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None,
         print(f"  Individual ROIs: {stats['individual_rois']:,}")
         print(f"  Total batches: {stats['total_batches']:,}")
         print(f"  Average batch size: {stats['avg_batch_size']:.1f}")
+        print(f"  Unique dimensions: {stats['unique_dimensions']}")
+        print(f"\nDimension Distribution (top 25):")
+        for dimension, count in stats['dimension_distribution'].items():
+            print(f"    {dimension}: {count:,} ROIs")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract various ROI features and save blobs as 1-bit PNGs.")

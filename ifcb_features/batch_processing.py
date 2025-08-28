@@ -12,6 +12,7 @@ from collections import defaultdict, Counter
 from typing import Dict, List, Tuple, Optional, Iterator
 import os
 import logging
+from tqdm import tqdm
 
 # Configure JAX for GPU if available
 try:
@@ -100,7 +101,7 @@ class ROIBatcher:
             'total_rois': total_rois,
             'unique_dimensions': len(self.dimension_stats),
             'batchable_by_size': batchable_counts,
-            'dimension_distribution': dict(self.dimension_stats.most_common(10))
+            'dimension_distribution': dict(self.dimension_stats.most_common(25))
         }
         
     def get_batches(self) -> Iterator[Tuple[np.ndarray, List[dict]]]:
@@ -135,8 +136,6 @@ class ROIBatcher:
                     
                     # Stack ROIs into batch array
                     print(f"Debug: Creating batch for dimension {dimension}")
-                    for idx, roi in enumerate(batch_rois):
-                        print(f"  ROI {idx}: shape {roi.shape}")
                     
                     roi_batch = np.stack(batch_rois, axis=0)  # Shape: [batch_size, height, width]
                     print(f"Debug: Final batch shape: {roi_batch.shape}")
@@ -185,7 +184,9 @@ class BatchedFeatureExtractor:
         sample_rois = []
         
         with sample:  # Open ROI file
-            for roi_number, roi_image in sample.images.items():
+            # Add progress bar for ROI loading
+            roi_items = list(sample.images.items())
+            for roi_number, roi_image in tqdm(roi_items, desc="Loading ROIs", leave=False):
                 roi_array = np.asarray(roi_image, dtype=np.float32)
                 metadata = {
                     'roi_number': roi_number,
@@ -200,7 +201,9 @@ class BatchedFeatureExtractor:
         all_blobs = {}
         
         # Process batches
-        for roi_batch, metadata_batch in self.batcher.get_batches():
+        # Convert to list to get total count for progress bar
+        batch_list = list(self.batcher.get_batches())
+        for roi_batch, metadata_batch in tqdm(batch_list, desc="Processing batches", leave=False):
             batch_size = len(metadata_batch)
             
             if batch_size >= self.batcher.min_batch_size:
@@ -248,11 +251,14 @@ class BatchedFeatureExtractor:
     def get_performance_stats(self) -> Dict:
         """Get performance statistics for this extraction session."""
         total_rois = self.stats['batched_rois'] + self.stats['individual_rois']
+        batcher_stats = self.batcher.get_batchable_stats()
         return {
             **self.stats,
             'total_rois': total_rois,
             'batch_efficiency': self.stats['batched_rois'] / total_rois * 100 if total_rois > 0 else 0,
-            'avg_batch_size': self.stats['batched_rois'] / self.stats['total_batches'] if self.stats['total_batches'] > 0 else 0
+            'avg_batch_size': self.stats['batched_rois'] / self.stats['total_batches'] if self.stats['total_batches'] > 0 else 0,
+            'dimension_distribution': batcher_stats['dimension_distribution'],
+            'unique_dimensions': batcher_stats['unique_dimensions']
         }
 
 def compute_features_with_batched_phasecong(roi_image, precomputed_Mm=None, raw_stitch=None):

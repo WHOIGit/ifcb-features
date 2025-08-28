@@ -62,11 +62,7 @@ def segment_roi_with_precomputed_Mm(roi, Mm, raw_stitch=None):
     # step 1a: for stitched images, chop the raw stitch mask
     # after growing it one pixel
     if raw_stitch is not None:
-        print(f"Debug: ROI shape: {roi.shape}, Mm shape: {Mm.shape}, raw_stitch.mask shape: {raw_stitch.mask.shape}")
         mask = binary_dilation(raw_stitch.mask)
-        if mask.shape != Mm.shape:
-            print(f"ERROR: Shape mismatch - mask {mask.shape} vs Mm {Mm.shape}")
-            raise ValueError(f"raw_stitch mask shape {mask.shape} doesn't match Mm shape {Mm.shape}")
         Mm[mask] = 0
     # step 2. hysteresis thresholding (of edges)
     B = hysthresh(Mm,HT_T1,HT_T2)
@@ -82,7 +78,6 @@ def segment_roi_with_precomputed_Mm(roi, Mm, raw_stitch=None):
     B = bwmorph_thin(B, 3)
     # step 6. background/foreground thresholding
     dark = kmeans_segment(roi)
-    print(f"Debug shapes - roi: {roi.shape}, B: {B.shape}, dark: {dark.shape}")
     B = np.logical_or(B, dark)
     # step 7. fill holes (surrounded by target pixels)
     B = binary_fill_holes(B)
@@ -99,5 +94,4 @@ def segment_roi(roi, raw_stitch=None):
     """
     # step 1. phase congruency (edge detection)
     Mm = phasecong_Mm(roi)
-    print('ROI SIZE: ', roi.shape, ' Mm: ', Mm.shape)
     return segment_roi_with_precomputed_Mm(roi, Mm, raw_stitch)
