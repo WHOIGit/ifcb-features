@@ -19,32 +19,23 @@ def blob_extent(B,area=None):
 def equiv_diameter(area):
     return np.sqrt(4*area/np.pi)
 
+def _ellipse_properties_regionprops(B):
+    """uses skimage.measure.regionprops to compute
+    ellipse properties. returns major axis length,
+    minor axis length, eccentricity, and orientation"""
+    props = regionprops(B.astype(np.uint8))
+    if len(props) == 0:
+        raise ValueError("No regions found in blob")
+    p = props[0]
+    return p.major_axis_length, p.minor_axis_length, p.eccentricity, p.orientation
+
 def ellipse_properties(B):
     """returns major axis length, minor axis length, eccentricity,
     and orientation"""
     """note that these values are all computable using
     skimnage.measure.regionprops, which differs only in that
     it returns the orientation in radians"""
-    P = np.vstack(np.where(B)) # coords of all points
-    # magnitudes and orthonormal basis vectors
-    # are computed via the eigendecomposition of
-    # the covariance matrix of the coordinates
-    eVal, eVec,  = eig(np.cov(P))
-
-    # axes lengths are 4x the sqrt of the eigenvalues,
-    # major and minor lenghts are max, min of them
-    L = 4 * np.sqrt(eVal)
-    maj_axis, min_axis = np.max(L), np.min(L)
-
-    # orientation is derived from the major axis's
-    # eigenvector
-    x,y = eVec[:, np.argmax(L)]
-    orientation = (180/np.pi) * np.arctan(y/x) - 90
-    
-    # eccentricity = 1st eccentricity
-    ecc = np.sqrt(1-(min_axis/maj_axis)**2)
-    
-    return maj_axis, min_axis, ecc, orientation
+    return _ellipse_properties_regionprops(B)
 
 def invmoments(B):
     """compute invariant moments. see
