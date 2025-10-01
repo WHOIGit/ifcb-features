@@ -91,7 +91,7 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None):
         all_features = []
         all_blobs = {}
         features_output_filename = os.path.join(output_directory, f"{sample.lid}_features_v4.csv")
-        blobs_output_filename = os.path.join(output_directory, f"{sample.lid}_blobs.zip")
+        blobs_output_filename = os.path.join(output_directory, f"{sample.lid}_blobs_v4.zip")
         for number, image in sample.images.items():
             features = {
                 'roi_number': number,
@@ -110,7 +110,7 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None):
 
         if all_features:
             df = pd.DataFrame.from_records(all_features, columns=['roi_number'] + FEATURE_COLUMNS)
-            df.to_csv(features_output_filename, index=False, float_format='%.8f')
+            df.to_csv(features_output_filename, index=False)
         
         if all_blobs:
             with zipfile.ZipFile(blobs_output_filename, 'w') as zf:
