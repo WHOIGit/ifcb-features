@@ -95,16 +95,16 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None, s
         raise ValueError("S3 configuration required for S3 storage mode")
     if storage_mode not in ["local", "s3"]:
         raise ValueError(f"Invalid storage mode '{storage_mode}'. Use 'local' or 's3'")
-    
+
     # Create blob storage backend
     blob_storage = create_blob_storage(
         storage_mode=storage_mode,
         output_directory=output_directory,
         s3_config=s3_config
     )
-    
+
     print(f"Using {storage_mode} storage mode")
-    
+
     try:
         for sample in samples_to_process:
             all_features = []
@@ -129,13 +129,13 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None, s
 
             all_features.append(features)
 
-            if all_features:
-                df = pd.DataFrame.from_records(all_features, columns=['roi_number'] + FEATURE_COLUMNS)
-                df.to_csv(features_output_filename, index=False, float_format='%.8f')
-            
-            # Finalize blob storage for this sample
-            blob_storage.finalize_sample(sample.lid)
-    
+        if all_features:
+            df = pd.DataFrame.from_records(all_features, columns=['roi_number'] + FEATURE_COLUMNS)
+            df.to_csv(features_output_filename, index=False)
+
+        # Finalize blob storage for this sample
+        blob_storage.finalize_sample(sample.lid)
+
     finally:
         # Cleanup storage resources
         blob_storage.cleanup()

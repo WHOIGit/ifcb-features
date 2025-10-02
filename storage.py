@@ -48,7 +48,7 @@ class LocalZipStorage(BlobStorage):
         """Store a blob in the ZIP file for this sample."""
         try:
             if sample_id not in self.zip_files:
-                zip_filename = os.path.join(self.output_directory, f"{sample_id}_blobs.zip")
+                zip_filename = os.path.join(self.output_directory, f"{sample_id}_blobs_v4.zip")
                 self.zip_files[sample_id] = zipfile.ZipFile(zip_filename, 'w')
                 self.blob_counts[sample_id] = 0
             
