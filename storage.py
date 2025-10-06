@@ -14,7 +14,7 @@ class S3Config:
     """Configuration for S3 blob storage."""
     bucket_name: str
     s3_url: str
-    prefix: str = "ifcb-blobs/"
+    prefix: str = "ifcb-blobs-slim-features/"
 
 
 class BlobStorage(ABC):

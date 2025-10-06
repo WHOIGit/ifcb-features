@@ -13,8 +13,11 @@ import traceback
 
 from ifcb_features.all import compute_features
 from storage import S3Config, create_blob_storage
+from vastdb_storage import VastDBFeatureStorage, VastDBConfig
 
 FEATURE_COLUMNS = [
+    'sample_id',
+    'roi_number',
     'Area',
     'Biovolume',
     'BoundingBox_xwidth',
@@ -47,18 +50,19 @@ FEATURE_COLUMNS = [
     'summedConvexPerimeter_over_Perimeter' 
 ]
 
-def extract_and_save_all_features(data_directory, output_directory, bins=None, storage_mode="local", s3_config=None):
+def extract_and_save_all_features(data_directory, output_directory, bins=None, storage_mode="local", s3_config=None, vastdb_config=None):
     """
     Extracts slim features from IFCB images in the given directory
-    and saves them to a CSV file.
+    and saves them to a CSV file and/or VastDB.
 
     Args:
         data_directory (str): Path to the directory containing IFCB data.
         output_directory (str): Path to the directory where the CSV file will be saved.
         bins (list, optional): A list of bin names (e.g., 'D20240423T115846_IFCB127') to process.
             If None, all bins in the data directory are processed. Defaults to None.
-        storage_mode (str): Storage mode - "local" or "s3". Defaults to "local".
+        storage_mode (str): Storage mode for blobs - "local" or "s3". Defaults to "local".
         s3_config (S3Config, optional): S3 configuration when using S3 storage.
+        vastdb_config (VastDBConfig, optional): VastDB configuration for storing features.
     """
     try:
         data_dir = DataDirectory(data_directory)
@@ -105,12 +109,19 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None, s
 
     print(f"Using {storage_mode} storage mode")
 
+    # Initialize VastDB storage if configured
+    vastdb_storage = None
+    if vastdb_config:
+        vastdb_storage = VastDBFeatureStorage(vastdb_config)
+        print(f"VastDB feature storage enabled: {vastdb_config.schema_name}.{vastdb_config.table_name}")
+
     try:
         for sample in samples_to_process:
             all_features = []
             features_output_filename = os.path.join(output_directory, f"{sample.lid}_features_v4.csv")
         for number, image in sample.images.items():
             features = {
+                'sample_id': sample.lid,
                 'roi_number': number,
             }
             try:
@@ -130,8 +141,14 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None, s
             all_features.append(features)
 
         if all_features:
-            df = pd.DataFrame.from_records(all_features, columns=['roi_number'] + FEATURE_COLUMNS)
+            df = pd.DataFrame.from_records(all_features, columns=FEATURE_COLUMNS)
+
+            # Save to CSV (always)
             df.to_csv(features_output_filename, index=False)
+
+            # Insert into VastDB if configured
+            if vastdb_storage:
+                vastdb_storage.insert_features(df)
 
         # Finalize blob storage for this sample
         blob_storage.finalize_sample(sample.lid)
@@ -139,6 +156,8 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None, s
     finally:
         # Cleanup storage resources
         blob_storage.cleanup()
+        if vastdb_storage:
+            vastdb_storage.cleanup()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract various ROI features and save blobs as 1-bit PNGs.")
@@ -147,12 +166,22 @@ if __name__ == "__main__":
     parser.add_argument("--bins", nargs='+', help="List of bin names to process (space-separated). If not provided, all bins are processed.")
     
     # S3 storage options
-    parser.add_argument("--storage-mode", choices=["local", "s3"], default="local", 
+    parser.add_argument("--storage-mode", choices=["local", "s3"], default="local",
                        help="Storage mode for blob images (default: local)")
     parser.add_argument("--s3-bucket", help="S3 bucket name (required when storage-mode=s3)")
     parser.add_argument("--s3-url", help="S3 endpoint URL (required when storage-mode=s3)")
-    parser.add_argument("--s3-prefix", default="ifcb-blobs/", 
-                       help="S3 key prefix for blob storage (default: ifcb-blobs/)")
+    parser.add_argument("--s3-prefix", default="ifcb-blobs-slim-features/",
+                       help="S3 key prefix for blob storage (default: ifcb-blobs-slim-features/)")
+
+    # VastDB feature storage options
+    parser.add_argument("--vastdb-enable", action="store_true",
+                       help="Enable VastDB feature storage")
+    parser.add_argument("--vastdb-bucket", help="VastDB bucket name (required when vastdb-enable)")
+    parser.add_argument("--vastdb-schema", help="VastDB schema name (required when vastdb-enable)")
+    parser.add_argument("--vastdb-table", help="VastDB table name (required when vastdb-enable)")
+    parser.add_argument("--vastdb-url", help="VastDB endpoint URL (defaults to s3-url if not provided)")
+    parser.add_argument("--vastdb-access-key", help="VastDB access key (uses AWS_ACCESS_KEY_ID env var if not provided)")
+    parser.add_argument("--vastdb-secret-key", help="VastDB secret key (uses AWS_SECRET_ACCESS_KEY env var if not provided)")
 
     args = parser.parse_args()
     
@@ -168,8 +197,35 @@ if __name__ == "__main__":
     else:
         s3_config = None
 
+    # Set up VastDB configuration if enabled
+    vastdb_config = None
+    if args.vastdb_enable:
+        if not args.vastdb_bucket or not args.vastdb_schema or not args.vastdb_table:
+            parser.error("--vastdb-bucket, --vastdb-schema, and --vastdb-table are required when using --vastdb-enable")
+
+        # Use provided endpoint or fall back to S3 URL
+        vastdb_url = args.vastdb_url or args.s3_url
+        if not vastdb_url:
+            parser.error("--vastdb-url or --s3-url must be provided when using --vastdb-enable")
+
+        # Get credentials from args or environment
+        access_key = args.vastdb_access_key or os.environ.get('AWS_ACCESS_KEY_ID')
+        secret_key = args.vastdb_secret_key or os.environ.get('AWS_SECRET_ACCESS_KEY')
+
+        if not access_key or not secret_key:
+            parser.error("VastDB credentials required: provide --vastdb-access-key/--vastdb-secret-key or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY environment variables")
+
+        vastdb_config = VastDBConfig(
+            bucket_name=args.vastdb_bucket,
+            schema_name=args.vastdb_schema,
+            table_name=args.vastdb_table,
+            endpoint_url=vastdb_url,
+            access_key=access_key,
+            secret_key=secret_key
+        )
+
     beginning = time.time()
-    extract_and_save_all_features(args.data_directory, args.output_directory, args.bins, args.storage_mode, s3_config)
+    extract_and_save_all_features(args.data_directory, args.output_directory, args.bins, args.storage_mode, s3_config, vastdb_config)
     elapsed = time.time() - beginning
 
     print(f'Total extract time: {elapsed:.2f} seconds')
