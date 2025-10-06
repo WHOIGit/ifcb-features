@@ -4,7 +4,7 @@ from typing import Optional
 import pandas as pd
 import pyarrow as pa
 import vastdb
-from storage import S3Config
+from blob_storage import S3Config
 
 
 @dataclass
