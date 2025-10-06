@@ -12,8 +12,8 @@ from PIL import Image
 import traceback
 
 from ifcb_features.all import compute_features
-from storage import S3Config, create_blob_storage
-from vastdb_storage import VastDBFeatureStorage, VastDBConfig
+from blob_storage import S3Config, create_blob_storage
+from feature_storage import VastDBFeatureStorage, VastDBConfig
 
 FEATURE_COLUMNS = [
     'sample_id',

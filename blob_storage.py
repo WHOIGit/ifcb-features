@@ -1,3 +1,5 @@
+"""S3 and local storage backends for IFCB blob images."""
+
 from abc import ABC, abstractmethod
 import zipfile
 import os
@@ -18,7 +20,7 @@ class S3Config:
 
 
 class BlobStorage(ABC):
-    """Abstract interface for blob storage backends."""
+    """Abstract interface for blob storage backends (S3 or local ZIP files)."""
     
     @abstractmethod
     def store_blob(self, sample_id: str, roi_number: int, blob_data: bytes) -> bool:
