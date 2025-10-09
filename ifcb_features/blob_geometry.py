@@ -22,9 +22,6 @@ def equiv_diameter(area):
 def ellipse_properties(B):
     """returns major axis length, minor axis length, eccentricity,
     and orientation"""
-    """note that these values are all computable using
-    skimnage.measure.regionprops, which differs only in that
-    it returns the orientation in radians"""
     P = np.vstack(np.where(B)) # coords of all points
     # magnitudes and orthonormal basis vectors
     # are computed via the eigendecomposition of
@@ -39,7 +36,7 @@ def ellipse_properties(B):
     # orientation is derived from the major axis's
     # eigenvector
     x,y = eVec[:, np.argmax(L)]
-    orientation = (180/np.pi) * np.arctan(y/x) - 90
+    orientation = np.arctan(y/x)
     
     # eccentricity = 1st eccentricity
     ecc = np.sqrt(1-(min_axis/maj_axis)**2)

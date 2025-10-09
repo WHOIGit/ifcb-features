@@ -26,13 +26,18 @@ classifiers = [
 ]
 dependencies = [
     "numpy",
+    "pandas",
+    "pillow",
     "scipy",
     "scikit-image",
-    "phasepack @ git+https://github.com/WHOIGit/phasepack@v1.6.1",
+    "phasepack @ git+https://github.com/WHOIGit/phasepack@jax",
     "scikit-learn",
     "pyifcb @ git+https://github.com/joefutrelle/pyifcb@v1.2.1",
     "tqdm",
-    "jax[cuda12]"
+    "jax[cuda12]",
+    "boto3",
+    "pyarrow>=18.0",
+    "vastdb"
 ]
 
 [project.urls]

@@ -136,7 +136,11 @@ class BlobFeatures(object):
     @lru_cache()
     def orientation(self):
         """return orientation of blob in degrees"""
-        return (180/np.pi) * self.regionprops.orientation
+        rad = self.ellipse_properties[3]
+        deg = (180/np.pi) * rad - 90
+        if deg < -90:
+            deg += 180
+        return deg
     @property
     @lru_cache()
     def centroid(self):

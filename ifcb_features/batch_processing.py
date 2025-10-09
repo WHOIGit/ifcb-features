@@ -135,11 +135,7 @@ class ROIBatcher:
                         batch_metadata.append(metadata)
                     
                     # Stack ROIs into batch array
-                    print(f"Debug: Creating batch for dimension {dimension}")
-                    
                     roi_batch = np.stack(batch_rois, axis=0)  # Shape: [batch_size, height, width]
-                    print(f"Debug: Final batch shape: {roi_batch.shape}")
-                    
                     yield roi_batch, batch_metadata
                     
                 i += batch_size
@@ -211,15 +207,21 @@ class BatchedFeatureExtractor:
                 Mm_batch = phasecong_Mm_batch(roi_batch)  # Shape: [batch_size, height, width]
                 self.stats['batched_rois'] += batch_size
                 self.stats['total_batches'] += 1
-                
+
                 # Process each ROI result in the batch
-                for i, (Mm_result, metadata) in enumerate(zip(Mm_batch, metadata_batch)):
+                for i, metadata in enumerate(metadata_batch):
                     roi_number = metadata['roi_number']
                     original_index = metadata['original_index']
                     original_roi = sample_rois[original_index][0]
-                    
+
+                    # Index into the batch explicitly (JAX arrays don't iterate well with zip)
+                    Mm_result = Mm_batch[i]
+
                     # Convert JAX result back to numpy for downstream processing
-                    Mm_np = np.array(Mm_result)
+                    Mm_np = np.asarray(Mm_result)
+                    # Ensure it's 2D (squeeze any extra dimensions from batch of size 1)
+                    while Mm_np.ndim > 2:
+                        Mm_np = np.squeeze(Mm_np, axis=0)
                     
                     # Use the batched compute_features function with precomputed phase congruency
                     blobs_image, roi_features = compute_features_with_batched_phasecong(

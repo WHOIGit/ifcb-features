@@ -44,21 +44,25 @@ def apply_blob_min(roi):
 def segment_roi_with_precomputed_Mm(roi, Mm, raw_stitch=None):
     """
     ROI segmentation using pre-computed phase congruency result.
-    
+
     This allows batched phase congruency computation while keeping the rest
     of the segmentation pipeline unchanged.
-    
+
     Args:
         roi: Original ROI image
         Mm: Pre-computed phase congruency result (M + m)
         raw_stitch: Optional stitch mask
-    
+
     Returns:
         Binary segmentation mask
     """
     # Convert JAX result to numpy if needed and ensure 2D
     Mm = np.asarray(Mm)
-    
+
+    # Ensure 2D by squeezing any extra dimensions
+    while Mm.ndim > 2:
+        Mm = np.squeeze(Mm, axis=0)
+
     # step 1a: for stitched images, chop the raw stitch mask
     # after growing it one pixel
     if raw_stitch is not None:
