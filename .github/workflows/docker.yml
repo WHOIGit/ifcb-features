@@ -2,7 +2,7 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [main, batch]
+    branches: [main, batch, s3-batch]
     tags: ['v*']
   pull_request:
     branches: [main]
