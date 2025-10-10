@@ -182,7 +182,7 @@ class BatchedFeatureExtractor:
         with sample:  # Open ROI file
             # Add progress bar for ROI loading
             roi_items = list(sample.images.items())
-            for roi_number, roi_image in tqdm(roi_items, desc="Loading ROIs", leave=False):
+            for roi_number, roi_image in tqdm(roi_items, desc="Loading ROIs", leave=False, mininterval=1.0, ncols=80):
                 roi_array = np.asarray(roi_image, dtype=np.float32)
                 metadata = {
                     'roi_number': roi_number,
@@ -199,7 +199,7 @@ class BatchedFeatureExtractor:
         # Process batches
         # Convert to list to get total count for progress bar
         batch_list = list(self.batcher.get_batches())
-        for roi_batch, metadata_batch in tqdm(batch_list, desc="Processing batches", leave=False):
+        for roi_batch, metadata_batch in tqdm(batch_list, desc="Processing batches", leave=False, mininterval=1.0, ncols=80):
             batch_size = len(metadata_batch)
             
             if batch_size >= self.batcher.min_batch_size:

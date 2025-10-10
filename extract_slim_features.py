@@ -154,7 +154,8 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None,
         print(f"Feature storage: local CSV")
 
     try:
-        for i, sample in enumerate(tqdm(samples_to_process, desc="Processing samples")):
+        # Use mininterval to reduce update frequency and avoid log spam
+        for i, sample in enumerate(tqdm(samples_to_process, desc="Processing samples", mininterval=1.0, ncols=80)):
             print(f"Processing sample: {sample.lid}")
             features_output_filename = os.path.join(output_directory, f"{sample.lid}_features_v4.csv")
             
@@ -182,7 +183,7 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None,
                     with sample:  # Open ROI file
                         # Add progress bar for individual ROI processing
                         roi_items = list(sample.images.items())
-                        for number, image in tqdm(roi_items, desc=f"Processing ROIs (individual)", leave=False):
+                        for number, image in tqdm(roi_items, desc=f"Processing ROIs (individual)", leave=False, mininterval=1.0, ncols=80):
                             features = {
                                 'sample_id': sample.lid,
                                 'roi_number': number,
