@@ -49,10 +49,15 @@ def phasecong_Mm_batch(roi_batch):
         JAX array of shape [N, H, W] containing M + m for each ROI
     """
     import jax.numpy as jnp
+    from phasepack.phasecong import _get_jit_compiled_phasecong
+
     # Ensure roi_batch is a JAX array
     roi_batch = jnp.asarray(roi_batch, dtype=jnp.float32)
 
-    M_batch, m_batch = phasecong(roi_batch,
+    # Use JIT-compiled version for GPU performance
+    phasecong_jit = _get_jit_compiled_phasecong()
+
+    M_batch, m_batch = phasecong_jit(roi_batch,
                                 nscale=PC_NSCALE,
                                 norient=PC_NORIENT,
                                 minWaveLength=PC_MIN_WAVELENGTH,
