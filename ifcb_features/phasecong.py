@@ -51,8 +51,8 @@ def phasecong_Mm_batch(roi_batch):
     import jax.numpy as jnp
     from phasepack.phasecong import _get_jit_compiled_phasecong
 
-    # Ensure roi_batch is a JAX array
-    roi_batch = jnp.asarray(roi_batch, dtype=jnp.float32)
+    # Ensure roi_batch is a JAX array with float64 for numerical precision
+    roi_batch = jnp.asarray(roi_batch, dtype=jnp.float64)
 
     # Use JIT-compiled version for GPU performance
     phasecong_jit = _get_jit_compiled_phasecong()
@@ -69,10 +69,7 @@ def phasecong_Mm_batch(roi_batch):
                                 noiseMethod=PC_NOISEMETHOD,
                                 covariance_only=True)
 
-    print(f"Debug phasecong_Mm_batch: M_batch.shape={M_batch.shape}, m_batch.shape={m_batch.shape}")
-    result = M_batch + m_batch
-    print(f"Debug phasecong_Mm_batch: result.shape={result.shape}")
-    return result
+    return M_batch + m_batch
 
 def phasecong_Mm(roi):
     """
