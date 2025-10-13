@@ -7,7 +7,7 @@ equivalence to individual processing.
 """
 
 import numpy as np
-import jax.numpy as jnp
+# jax.numpy not needed at module level - JAX is imported in phasecong_Mm_batch when needed
 from collections import defaultdict, Counter
 from typing import Dict, List, Tuple, Optional, Iterator
 import os
