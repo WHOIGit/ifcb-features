@@ -17,12 +17,16 @@ from tqdm import tqdm
 # Configure JAX for GPU if available
 try:
     import jax
+
+    # Enable 64-bit precision in JAX (required for numerical accuracy)
+    jax.config.update("jax_enable_x64", True)
+
     # Set GPU device if specified
     gpu_device = os.environ.get('IFCB_GPU_DEVICE', None)
     if gpu_device is not None:
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_device)
         jax.config.update('jax_platform_name', 'gpu')
-    
+
     # Check if GPU is available
     try:
         devices = jax.devices('gpu')
@@ -32,7 +36,7 @@ try:
             logging.info("No GPU devices found, using CPU")
     except:
         logging.info("GPU not available, using CPU")
-        
+
 except ImportError:
     logging.warning("JAX not available, falling back to CPU processing")
 
