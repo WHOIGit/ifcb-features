@@ -330,3 +330,275 @@ def compute_features_with_batched_phasecong(roi_image, precomputed_Mm=None, raw_
     else:
         # Fall back to original compute_features
         return compute_features(roi_image, raw_stitch=raw_stitch)
+
+
+class CrossSampleResultRouter:
+    """
+    Manages accumulation and routing of results from cross-sample batching.
+    
+    Accumulates features and blobs in memory by sample_id, then writes complete
+    sample files when all ROIs for a sample have been processed.
+    """
+    
+    def __init__(self, max_memory_mb=1000):
+        self.sample_results = defaultdict(lambda: {'features': [], 'blobs': {}})
+        self.sample_metadata = {}  # sample_id -> {'csv_path': ..., 'zip_path': ...}
+        self.expected_roi_counts = {}  # sample_id -> expected_count
+        self.processed_roi_counts = defaultdict(int)  # sample_id -> processed_count
+        self.completed_samples = set()
+        self.max_memory_mb = max_memory_mb
+        self.current_memory_estimate = 0
+        
+    def register_sample(self, sample_id, csv_path, zip_path, expected_roi_count):
+        """Register a sample with its output paths and expected ROI count."""
+        # Convert sample_id to string if it's a Pid object
+        sample_id_str = str(sample_id)
+        self.sample_metadata[sample_id_str] = {
+            'csv_path': csv_path,
+            'zip_path': zip_path
+        }
+        self.expected_roi_counts[sample_id_str] = expected_roi_count
+        
+    def add_result(self, sample_id, roi_number, features, blob_data):
+        """Add a result for a specific sample and ROI."""
+        # Convert sample_id to string if it's a Pid object
+        sample_id_str = str(sample_id)
+        
+        # Add feature result
+        features_with_roi = {'roi_number': roi_number}
+        features_with_roi.update(features)
+        self.sample_results[sample_id_str]['features'].append(features_with_roi)
+        
+        # Add blob result
+        self.sample_results[sample_id_str]['blobs'][roi_number] = blob_data
+        
+        # Update counters
+        self.processed_roi_counts[sample_id_str] += 1
+        
+        # Estimate memory usage (rough estimate)
+        blob_size_kb = len(blob_data) / 1024 if blob_data else 0
+        feature_size_kb = 2  # Rough estimate for feature dict
+        self.current_memory_estimate += (blob_size_kb + feature_size_kb) / 1024  # Convert to MB
+        
+        # Check if sample is complete
+        if self.processed_roi_counts[sample_id_str] >= self.expected_roi_counts[sample_id_str]:
+            self._finalize_sample(sample_id_str)
+            
+    def should_flush_memory(self):
+        """Check if memory usage exceeds threshold."""
+        return self.current_memory_estimate > self.max_memory_mb
+        
+    def get_completed_samples(self):
+        """Get list of completed sample IDs."""
+        return list(self.completed_samples)
+        
+    def _finalize_sample(self, sample_id):
+        """Write complete sample results to files and free memory."""
+        # Convert sample_id to string if it's a Pid object
+        sample_id_str = str(sample_id)
+        
+        if sample_id_str in self.completed_samples:
+            return
+            
+        print(f"Finalizing results for sample {sample_id_str}")
+        
+        # Get sample data
+        sample_data = self.sample_results[sample_id_str]
+        metadata = self.sample_metadata[sample_id_str]
+        
+        # Write CSV file
+        if sample_data['features']:
+            import pandas as pd
+            # Sort by roi_number to maintain consistent ordering
+            features_sorted = sorted(sample_data['features'], key=lambda x: x['roi_number'])
+            df = pd.DataFrame(features_sorted)
+            df.to_csv(metadata['csv_path'], index=False, float_format='%.8f')
+            
+        # Write ZIP file  
+        if sample_data['blobs']:
+            import zipfile
+            with zipfile.ZipFile(metadata['zip_path'], 'w') as zf:
+                for roi_number, blob_data in sample_data['blobs'].items():
+                    # Extract sample lid from sample_id (assuming format like "IFCB119_2012_269_124847")
+                    sample_lid = sample_id_str  # Use sample_id_str directly as lid
+                    filename = f"{sample_lid}_{roi_number:05d}.png"
+                    zf.writestr(filename, blob_data)
+                    
+        # Mark as completed and free memory
+        self.completed_samples.add(sample_id_str)
+        
+        # Estimate memory freed
+        freed_memory = 0
+        for blob_data in sample_data['blobs'].values():
+            freed_memory += len(blob_data) / (1024 * 1024) if blob_data else 0
+        freed_memory += len(sample_data['features']) * 2 / 1024  # Feature estimates
+        
+        # Clean up memory
+        del self.sample_results[sample_id_str]
+        self.current_memory_estimate -= freed_memory
+        self.current_memory_estimate = max(0, self.current_memory_estimate)
+        
+    def finalize_all_remaining(self):
+        """Finalize any remaining samples (called at end of processing)."""
+        remaining_samples = set(self.sample_results.keys()) - self.completed_samples
+        for sample_id in remaining_samples:
+            self._finalize_sample(sample_id)
+
+
+class CrossSampleBatchedFeatureExtractor:
+    """
+    Cross-sample batching feature extractor that accumulates ROIs across multiple
+    samples before processing in large batches for improved GPU utilization.
+    """
+    
+    def __init__(self, min_batch_size=32, max_batch_size=256, 
+                 accumulation_samples=10, max_memory_mb=1000):
+        """
+        Args:
+            min_batch_size: Minimum ROIs needed to form a batch
+            max_batch_size: Maximum batch size for memory management  
+            accumulation_samples: Number of samples to accumulate before processing
+            max_memory_mb: Memory limit for accumulated ROIs/results
+        """
+        self.batcher = ROIBatcher(min_batch_size, max_batch_size)
+        self.result_router = CrossSampleResultRouter(max_memory_mb)
+        self.accumulation_samples = accumulation_samples
+        self.max_memory_mb = max_memory_mb
+        self.accumulated_samples = 0
+        
+        # Statistics
+        self.stats = {
+            'batched_rois': 0,
+            'individual_rois': 0, 
+            'total_batches': 0,
+            'samples_processed': 0
+        }
+        
+    def accumulate_sample(self, sample, csv_path, zip_path):
+        """
+        Accumulate ROIs from a sample into the global batcher.
+        
+        Args:
+            sample: IFCB sample object
+            csv_path: Path where sample CSV should be saved
+            zip_path: Path where sample ZIP should be saved
+        """
+        sample_rois = []
+        
+        with sample:  # Open ROI file
+            # First pass: count ROIs for result router
+            roi_items = list(sample.images.items())
+            self.result_router.register_sample(sample.pid, csv_path, zip_path, len(roi_items))
+            
+            # Second pass: load ROIs with progress bar
+            for roi_number, roi_image in tqdm(roi_items, desc=f"Loading ROIs from {sample.lid}", leave=False):
+                roi_array = np.asarray(roi_image, dtype=np.float32)
+                metadata = {
+                    'roi_number': roi_number,
+                    'sample_id': sample.pid,
+                    'sample_lid': sample.lid,
+                    'global_index': len(sample_rois)  # Index within this function call
+                }
+                sample_rois.append((roi_array, metadata))
+                self.batcher.add_roi(roi_array, metadata)
+                
+        self.accumulated_samples += 1
+        return len(sample_rois)
+        
+    def should_process_batches(self):
+        """Check if we should process accumulated batches."""
+        return (self.accumulated_samples >= self.accumulation_samples or 
+                self.result_router.should_flush_memory())
+                
+    def process_accumulated_batches(self):
+        """Process all accumulated batches and route results to appropriate samples."""
+        if not self.batcher.roi_groups:
+            return
+            
+        # Process batches with progress bar
+        batch_list = list(self.batcher.get_batches())
+        
+        for roi_batch, metadata_batch in tqdm(batch_list, desc="Processing cross-sample batches", leave=False):
+            batch_size = len(metadata_batch)
+            
+            if batch_size >= self.batcher.min_batch_size:
+                # Process as batch
+                Mm_batch = phasecong_Mm_batch(roi_batch)
+                self.stats['batched_rois'] += batch_size
+                self.stats['total_batches'] += 1
+                
+                # Process each ROI result in the batch
+                for Mm_result, metadata in zip(Mm_batch, metadata_batch):
+                    self._process_single_result(roi_batch, Mm_result, metadata, from_batch=True)
+                    
+            else:
+                # Process individually (fallback for small groups)
+                self.stats['individual_rois'] += batch_size
+                for roi, metadata in zip(roi_batch, metadata_batch):
+                    # For individual processing, roi is 2D and we need to compute phase congruency
+                    self._process_single_result(roi, None, metadata, from_batch=False)
+                    
+        # Reset accumulation counter
+        self.accumulated_samples = 0
+        
+    def _process_single_result(self, roi_or_batch, Mm_result, metadata, from_batch=True):
+        """Process a single ROI result and route it to the correct sample."""
+        sample_id = metadata['sample_id']
+        roi_number = metadata['roi_number']
+        
+        try:
+            if from_batch:
+                # Use precomputed phase congruency from batch
+                # Need to get original ROI - this is tricky in cross-sample mode
+                # For now, we'll extract the ROI from the batch
+                global_index = metadata['global_index']
+                if roi_or_batch.ndim == 3:  # Batch
+                    original_roi = roi_or_batch[global_index % roi_or_batch.shape[0]]
+                else:
+                    original_roi = roi_or_batch
+                    
+                Mm_np = np.array(Mm_result)
+                blobs_image, roi_features = compute_features_with_batched_phasecong(
+                    original_roi, precomputed_Mm=Mm_np
+                )
+            else:
+                # Individual processing fallback
+                blobs_image, roi_features = compute_features_with_batched_phasecong(roi_or_batch)
+                
+            # Convert blobs to PNG data
+            if blobs_image is not None:
+                import io
+                from PIL import Image
+                img_buffer = io.BytesIO()
+                Image.fromarray((blobs_image > 0).astype(np.uint8) * 255).save(img_buffer, format="PNG")
+                blob_data = img_buffer.getvalue()
+            else:
+                blob_data = None
+                
+            # Route result to appropriate sample
+            self.result_router.add_result(sample_id, roi_number, roi_features, blob_data)
+            
+        except Exception as e:
+            print(f"Error processing ROI {roi_number} from sample {sample_id}: {e}")
+            # Still route a result to maintain counts
+            self.result_router.add_result(sample_id, roi_number, {}, None)
+            
+    def finalize_all_results(self):
+        """Finalize all remaining results."""
+        self.result_router.finalize_all_remaining()
+        
+    def get_performance_stats(self):
+        """Get performance statistics for this extraction session."""
+        total_rois = self.stats['batched_rois'] + self.stats['individual_rois']
+        batcher_stats = self.batcher.get_batchable_stats()
+        
+        return {
+            **self.stats,
+            'total_rois': total_rois,
+            'batch_efficiency': self.stats['batched_rois'] / total_rois * 100 if total_rois > 0 else 0,
+            'avg_batch_size': self.stats['batched_rois'] / self.stats['total_batches'] if self.stats['total_batches'] > 0 else 0,
+            'dimension_distribution': batcher_stats['dimension_distribution'],
+            'unique_dimensions': batcher_stats['unique_dimensions'],
+            'completed_samples': len(self.result_router.completed_samples),
+            'memory_usage_mb': self.result_router.current_memory_estimate
+        }

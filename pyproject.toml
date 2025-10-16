@@ -28,7 +28,7 @@ dependencies = [
     "numpy",
     "scipy",
     "scikit-image",
-    "phasepack @ git+https://github.com/WHOIGit/phasepack@v1.6.1",
+    "phasepack @ git+https://github.com/WHOIGit/phasepack@jax",
     "scikit-learn",
     "pyifcb @ git+https://github.com/joefutrelle/pyifcb@v1.2.1",
     "tqdm"
