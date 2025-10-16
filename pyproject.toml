@@ -31,7 +31,8 @@ dependencies = [
     "phasepack @ git+https://github.com/WHOIGit/phasepack@jax",
     "scikit-learn",
     "pyifcb @ git+https://github.com/joefutrelle/pyifcb@v1.2.1",
-    "tqdm"
+    "tqdm",
+    "jax[cuda12]"
 ]
 
 [project.urls]
