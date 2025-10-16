@@ -128,38 +128,46 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None, b
         for sample in samples_to_process:
             all_features = []
             features_output_filename = os.path.join(output_directory, f"{sample.lid}_features_v4.csv")
-        for number, image in sample.images.items():
-            features = {
-                'sample_id': sample.lid,
-                'roi_number': number,
-            }
+
             try:
-                blobs_image, roi_features = compute_features(image)
-                features.update(roi_features)
+                with sample:  # Open ROI file
+                    for number, image in sample.images.items():
+                        features = {
+                            'sample_id': sample.lid,
+                            'roi_number': number,
+                        }
+                        try:
+                            blobs_image, roi_features = compute_features(image)
+                            features.update(roi_features)
 
-                # Store blob using the configured storage backend
-                img_buffer = io.BytesIO()
-                Image.fromarray((blobs_image > 0).astype(np.uint8) * 255).save(img_buffer, format="PNG")
-                blob_data = img_buffer.getvalue()
-                
-                blob_storage.store_blob(sample.lid, number, blob_data)
-                
+                            # Store blob using the configured storage backend
+                            img_buffer = io.BytesIO()
+                            Image.fromarray((blobs_image > 0).astype(np.uint8) * 255).save(img_buffer, format="PNG")
+                            blob_data = img_buffer.getvalue()
+
+                            blob_storage.store_blob(sample.lid, number, blob_data)
+
+                        except Exception as e:
+                            print(f"Error processing ROI {number} in sample {sample.pid}: {e}")
+
+                        all_features.append(features)
+
+                if all_features:
+                    df = pd.DataFrame.from_records(all_features, columns=FEATURE_COLUMNS)
+
+                    # Save features based on storage mode
+                    if feature_storage_mode == "local":
+                        df.to_csv(features_output_filename, index=False)
+                    elif feature_storage_mode == "vastdb":
+                        vastdb_storage.insert_features(df)
+
+                # Finalize blob storage for this sample
+                blob_storage.finalize_sample(sample.lid)
+
             except Exception as e:
-                print(f"Error processing ROI {number} in sample {sample.pid}: {e}")
-
-            all_features.append(features)
-
-        if all_features:
-            df = pd.DataFrame.from_records(all_features, columns=FEATURE_COLUMNS)
-
-            # Save features based on storage mode
-            if feature_storage_mode == "local":
-                df.to_csv(features_output_filename, index=False)
-            elif feature_storage_mode == "vastdb":
-                vastdb_storage.insert_features(df)
-
-        # Finalize blob storage for this sample
-        blob_storage.finalize_sample(sample.lid)
+                print(f"Error processing sample {sample.pid}: {e}")
+                traceback.print_exc()
+                continue
 
     finally:
         # Cleanup storage resources
