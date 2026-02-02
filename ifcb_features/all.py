@@ -1,13 +1,14 @@
 import numpy as np
 
 from scipy.ndimage.measurements import find_objects
+from scipy.spatial import QhullError
 
 from skimage.measure import regionprops
 
 from functools import lru_cache
 
 from .segmentation import segment_roi
-from .blobs import find_blobs, rotate_blob, blob_shape
+from .blobs import find_blobs, label_blobs, rotate_blob, blob_shape
 from .blob_geometry import (equiv_diameter, ellipse_properties,
                             invmoments, convex_hull, convex_hull_image,
                             convex_hull_properties, feret_diameter,
@@ -15,17 +16,18 @@ from .blob_geometry import (equiv_diameter, ellipse_properties,
 from .morphology import find_perimeter
 from .biovolume import (distmap_volume_surface_area,
                         sor_volume_surface_area)
-from .perimeter import perimeter_stats, hausdorff_symmetry
+from .perimeter import perimeter_stats, hausdorff_symmetry, benkrid_perimeter
 from .texture import statxture, masked_pixels, texture_pixels
 from .hog import image_hog
 from .ringwedge import ring_wedge, _N_RINGS, _N_WEDGES
 
 class BlobFeatures(object):
-    def __init__(self,blob_image,roi_image):
+    def __init__(self,blob_image,roi_image, roi=None):
         """roi_image should be the same size as the blob image,
         so a sub-roi"""
         self.image = np.array(blob_image).astype(np.bool)
         self.roi_image = roi_image
+        self.roi = roi
     @property
     def shape(self):
         """h,w of blob image"""
@@ -58,7 +60,7 @@ class BlobFeatures(object):
     @property
     @lru_cache()
     def perimeter(self):
-        return self.regionprops.perimeter
+        return benkrid_perimeter(self.perimeter_image)
     @property
     def area_over_perimeter_squared(self):
         return self.area / self.perimeter**2
@@ -74,11 +76,20 @@ class BlobFeatures(object):
     @lru_cache()
     def convex_hull(self):
         """vertices of convex hull of blob"""
-        return convex_hull(self.perimeter_points)
+        try:
+            return convex_hull(self.perimeter_points)
+        except QhullError:
+            # Colinear or degenerate perimeter points; fall back to raw points.
+            return np.vstack(self.perimeter_points).T
     @property
     @lru_cache()
     def convex_hull_properties(self):
-        return convex_hull_properties(self.convex_hull)
+        hull = self.convex_hull
+        if hull is None or hull.shape[0] < 3:
+            return self.perimeter, self.area
+        if np.linalg.matrix_rank(hull - hull[0]) < 2:
+            return self.perimeter, self.area
+        return convex_hull_properties(hull)
     @property
     @lru_cache()
     def convex_perimeter(self):
@@ -190,7 +201,10 @@ class BlobFeatures(object):
     @lru_cache()
     def distmap_volume_surface_area(self):
         """volume of blob computed via Moberg & Sosik algorithm"""
-        return distmap_volume_surface_area(self.image, self.perimeter_image)
+        # MATLAB uses a tight cropped blob image for distmap via regionprops.Image.
+        img = self.regionprops.image.astype(bool)
+        perim = find_perimeter(img)
+        return distmap_volume_surface_area(img, perim)
     @property
     @lru_cache()
     def sor_volume_surface_area(self):
@@ -312,10 +326,22 @@ class RoiFeatures(object):
         the segmented mask, ordered by largest area to smallest area"""
         labeled, bboxes, blobs = find_blobs(self.blobs_image)
         cropped_rois = [self.image[bbox] for bbox in bboxes]
-        # ignore 1-pixel wide/high blobs
-        Bs = [BlobFeatures(b,R) for b,R in zip(blobs,cropped_rois) if min(R.shape) > 1]
+        Bs = [BlobFeatures(b, R, roi=self) for b, R in zip(blobs, cropped_rois)]
         # sort by area, largest first
         return sorted(Bs, key=lambda B: B.area, reverse=True)
+    @property
+    @lru_cache()
+    def largest_blob_mask_full(self):
+        """full-size mask for the largest blob (MATLAB uses full-size mask for biovolume)"""
+        labeled, objects = label_blobs(self.blobs_image)
+        if not objects:
+            return None
+        # labels are 1-based in labeled image
+        areas = []
+        for ix in range(1, len(objects) + 1):
+            areas.append(int(np.sum(labeled == ix)))
+        idx = int(np.argmax(areas)) + 1
+        return labeled == idx
     @property
     def num_blobs(self):
         return len(self.blobs)
@@ -422,7 +448,9 @@ class RoiFeatures(object):
         return self.ring_wedge[3]
     @lru_cache()
     def summed_attr(self, attr):
-        return np.sum(getattr(b,attr) for b in self.blobs)
+        vals = np.array([getattr(b, attr) for b in self.blobs], dtype=np.float64)
+        # MATLAB stores blob props in double arrays and sums in double.
+        return float(np.sum(vals, dtype=np.float64))
     @property
     def summed_area(self):
         return self.summed_attr('area')
