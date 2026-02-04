@@ -45,6 +45,8 @@ def bottom_top_area(X,Y,Z,ignore_ground=False):
     return area_bot, area_top
 
 USE_EDT_INDICES = True  # recompute distances from indices to better match MATLAB bwdist
+# Match legacy MATLAB SOR center logic (pre-e5aaf7f) when True.
+SOR_USE_OLD_CENTER = True
 
 def distmap_volume_surface_area(B,perimeter_image=None):
     """Moberg & Sosik biovolume algorithm
@@ -53,7 +55,6 @@ def distmap_volume_surface_area(B,perimeter_image=None):
         perimeter_image = find_perimeter(B)
     # elementwise distance to perimeter + 1
     if USE_EDT_INDICES:
-        # Recompute distances from integer index deltas using float32 math.
         _, inds = distance_transform_edt(1 - perimeter_image, return_indices=True)
         coords = np.indices(perimeter_image.shape, dtype=np.int64)
         deltas = coords - inds.astype(np.int64, copy=False)
@@ -66,52 +67,16 @@ def distmap_volume_surface_area(B,perimeter_image=None):
     D = D.astype(np.float32)
     D[~fill] = np.nan
     Dm = np.ma.array(D, mask=np.isnan(D))
-
-    # MATLAB nansum/nanmean on single uses size-dependent reduction paths.
-    # Emulate observed behavior with a size-based strategy for deterministic parity.
-    flat = D.ravel(order='F')
-    nan_mask = np.isnan(flat)
-    count = np.int64(np.sum(~nan_mask))
-    flat = np.where(nan_mask, np.float32(0.0), flat)
-    if count == 0:
-        sum_val = np.float32(0.0)
-        mean_val = np.float32(np.nan)
-    else:
-        n = flat.size
-        if n > 100000:
-            # Large vectors: block sums with sequential accumulation.
-            block = 4096
-            total = np.float32(0.0)
-            for i in range(0, n, block):
-                part = np.sum(flat[i:i + block], dtype=np.float32)
-                total = np.float32(total + part)
-            sum_val = np.float32(total)
-        elif n > 90000:
-            # Near-threshold sizes: pairwise reduction.
-            arr = flat.astype(np.float32, copy=True)
-            while arr.size > 1:
-                if arr.size % 2 == 1:
-                    arr = np.append(arr, np.float32(0.0))
-                arr = arr.reshape(-1, 2)
-                arr = np.sum(arr, axis=1, dtype=np.float32)
-            sum_val = np.float32(arr[0])
-        else:
-            # Default: 4-way interleaved accumulation.
-            acc = np.zeros(4, dtype=np.float32)
-            for i, v in enumerate(flat):
-                acc[i % 4] = np.float32(acc[i % 4] + v)
-            sum_val = np.float32(np.sum(acc, dtype=np.float32))
-        mean_val = np.float32(sum_val / np.float32(count))
-
-    # representative transect (match MATLAB single-precision accumulation)
-    x = np.float32(4.0) * mean_val - np.float32(2.0)
+    # representative transect
+    x = np.float32(4.0) * np.nanmean(Dm, dtype=np.float32) - np.float32(2.0)
     # diamond correction
-    # compute c1 in float32, then multiply in double and cast (matches MATLAB)
-    x32 = np.float32(x)
-    c1 = (x32 * x32) / (x32 * x32 + np.float32(2.0) * x32 + np.float32(0.5))
-    t1 = np.float32(float(c1) * (np.pi / 2))
-    t2 = np.float32(t1 * np.float32(2.0))
-    volume = np.float32(t2 * sum_val)
+    c1 = x**2 / (x**2 + 2*x + 0.5)
+    # circle correction
+    # c2 = np.pi / 2 
+    # volume = c1 * c2 * 2 * np.sum(D)
+    # compute volume in float32 to match MATLAB single-precision path
+    c1 = np.float32(c1)
+    volume = np.float32(c1 * np.float32(np.pi) * np.nansum(D, dtype=np.float32))
     # surface area
     # surface area uses NaN-masked distances as zero
     D_sa = np.nan_to_num(D, nan=0.0)
@@ -123,82 +88,36 @@ def distmap_volume_surface_area(B,perimeter_image=None):
     area_bot, area_top = bottom_top_area(X, Y, D_sa, ignore_ground=True)
     # final correction of the diamond cross-section
     # inherent in the distance map to be circular instead
-    def _sum_surface(arr):
-        arr32 = arr.astype(np.float32, copy=False)
-        n = arr32.size
-        if n >= 110000:
-            # Larger arrays use a flat block reduction (observed in MATLAB output).
-            flat = arr32.ravel(order='F')
-            total = np.float32(0.0)
-            block = 130
-            for i in range(0, flat.size, block):
-                part = np.sum(flat[i:i + block], dtype=np.float32)
-                total = np.float32(total + part)
-            return np.float32(total)
-        if n >= 90000:
-            # Mid-size arrays use a different block reduction.
-            flat = arr32.ravel(order='F')
-            total = np.float32(0.0)
-            block = 307
-            for i in range(0, flat.size, block):
-                part = np.sum(flat[i:i + block], dtype=np.float32)
-                total = np.float32(total + part)
-            return np.float32(total)
-        # Smaller arrays use a 4-way interleaved reduction.
-        flat = arr32.ravel(order='F')
-        acc = np.zeros(4, dtype=np.float32)
-        for i, v in enumerate(flat):
-            acc[i % 4] = np.float32(acc[i % 4] + v)
-        total = np.float32(0.0)
-        for v in acc:
-            total = np.float32(total + v)
-        return np.float32(total)
-
-    # MATLAB uses single-precision constants for pi/sqrt(2) in this path.
-    # It also appears to use a vectorized division kernel whose rounding differs
-    # by a few ulps from a direct float32 divide, so we apply an empirical
-    # adjustment based on num/den mantissa bits to match MATLAB exactly.
-    pi32 = np.float32(np.pi)
-    sqrt2 = np.float32(np.sqrt(2.0))
-    num_c = np.float32(pi32 * x / np.float32(2.0))
-    den_c = np.float32(
-        np.float32(2.0) * sqrt2 * x / np.float32(2.0) +
-        (np.float32(1.0) + sqrt2) / np.float32(2.0)
+    c = (np.float32(np.pi) * x / np.float32(2.0)) / (
+        np.float32(2.0) * np.float32(np.sqrt(2.0)) * x / np.float32(2.0)
+        + (np.float32(1.0) + np.float32(np.sqrt(2.0))) / np.float32(2.0)
     )
-    c = np.float32(num_c / den_c)
-    num_bits = np.frombuffer(np.float32(num_c).tobytes(), dtype=np.uint32)[0]
-    den_bits = np.frombuffer(np.float32(den_c).tobytes(), dtype=np.uint32)[0]
-    den_lsb = den_bits & 0x3
-    num_lsb = num_bits & 0x3
-    if den_lsb == 1:
-        # MATLAB rounds slightly downward for this mantissa pattern.
-        c = np.nextafter(c, np.float32(-np.inf))
-        if num_lsb == 2:
-            c = np.nextafter(c, np.float32(-np.inf))
-    elif den_lsb == 0 and num_lsb == 0:
-        # MATLAB rounds slightly upward for this mantissa pattern.
-        c = np.nextafter(c, np.float32(np.inf))
-    sum_bot = _sum_surface(area_bot)
-    sum_top = _sum_surface(area_top)
-    sa = np.float32(2.0) * c * np.float32(sum_bot + sum_top)
+    sa = np.float32(2.0) * c * np.float32(
+        np.nansum(area_bot.astype(np.float32), dtype=np.float32)
+        + np.nansum(area_top.astype(np.float32), dtype=np.float32)
+    )
     # return volume, representative transect, and surface area
     return volume, x, sa
 
 def sor_volume_surface_area(B):
     """pass in rotated blob"""
     """Sosik and Kilfoyle surface area / volume algorithm"""
-    # compute center using median of row indices (MATLAB surface_area_revolve_2e)
+    # compute center using median (current) or bottom+radius (legacy MATLAB)
     h, w = B.shape
-    rowind = np.arange(1, h + 1, dtype=np.float64)[:, None]
-    temp = rowind * B
-    temp = temp.astype(np.float64, copy=False)
-    temp[temp == 0] = np.nan
-    center = np.nanmedian(temp, axis=0) + 0.5
-    # compute the radius of each slice
     r = np.sum(B, axis=0).astype(np.float64)
     ri = r > 0
     r = (r / 2.0)[ri]
-    center = center[ri]
+    if SOR_USE_OLD_CENTER:
+        y1 = np.argmax(B, axis=0).astype(np.float64) + 1.0
+        y1 = y1[ri]
+        center = y1 + r
+    else:
+        rowind = np.arange(1, h + 1, dtype=np.float64)[:, None]
+        temp = rowind * B
+        temp = temp.astype(np.float64, copy=False)
+        temp[temp == 0] = np.nan
+        center = np.nanmedian(temp, axis=0) + 0.5
+        center = center[ri]
     n_slices = r.size
     # compute angles between 0 and 180 degrees inclusive, in radians
     da = 0.25
@@ -232,9 +151,7 @@ def sor_volume_surface_area(B):
     
     # surface area
     # multiply sum of areas of quadrilaterals by 2 to account for angles 180-360
-    sum_bot = np.sum(area_bot.ravel(order='F'), dtype=np.float64)
-    sum_top = np.sum(area_top.ravel(order='F'), dtype=np.float64)
-    sa = 2 * (sum_bot + sum_top)
+    sa = 2 * (np.sum(area_bot) + np.sum(area_top))
     # add flat end caps
     sa += np.sum(np.pi * r[[0,-1],0]**2)
     
