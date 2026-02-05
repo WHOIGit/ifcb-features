@@ -147,10 +147,12 @@ class BlobFeatures(object):
     @lru_cache()
     def orientation(self):
         """return orientation of blob in degrees"""
-        rad = self.ellipse_properties[3]
-        deg = (180/np.pi) * rad - 90
-        if deg < -90:
-            deg += 180
+        # skimage.regionprops.orientation is angle between the 0th axis (rows)
+        # and the major axis. MATLAB uses angle from the x-axis (columns).
+        rad = self.regionprops.orientation
+        deg = 90.0 + (180.0 / np.pi) * rad
+        if deg > 90.0:
+            deg -= 180.0
         return deg
     @property
     @lru_cache()
