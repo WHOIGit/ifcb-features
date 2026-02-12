@@ -1,3 +1,4 @@
+import os
 import numpy as np
 
 from skimage import img_as_float32
@@ -19,6 +20,104 @@ SED = diamond(1)
 HT_T1, HT_T2 = 0.3, 0.09
 BLOB_MIN = 40
 DARK_THRESHOLD_ADJUSTMENT = 0.75
+USE_STRICT_KMEANS = True
+KMEANS_FALLBACK_SEED = os.getenv("IFCB_KMEANS_FALLBACK_SEED")
+if KMEANS_FALLBACK_SEED is not None:
+    try:
+        KMEANS_FALLBACK_SEED = int(KMEANS_FALLBACK_SEED)
+    except ValueError:
+        KMEANS_FALLBACK_SEED = None
+
+
+def _kmeans_1d_strict(values, max_iter=100):
+    """MATLAB-style 1D k-means (batch) with singleton empty handling."""
+    values = np.asarray(values, dtype=np.float32)
+    n = values.shape[0]
+    if n == 0:
+        return np.array([0.0, 1.0], dtype=np.float32), np.zeros(0, dtype=np.int8)
+
+    centers = np.array([0.0, 1.0], dtype=np.float32)
+    # Initial distances/assignments from provided centers
+    D = np.empty((n, 2), dtype=np.float32)
+    D[:, 0] = (values - centers[0]) * (values - centers[0])
+    D[:, 1] = (values - centers[1]) * (values - centers[1])
+    idx = np.argmin(D, axis=1).astype(np.int8)
+
+    changed = np.array([0, 1], dtype=np.int64)
+    previdx = np.zeros(n, dtype=np.int8)
+    prevtotsumD = np.float32(np.inf)
+
+    for _iter in range(max_iter):
+        # Recompute centers and counts for changed clusters
+        counts = np.bincount(idx, minlength=2).astype(np.int64)
+        sums = np.zeros(2, dtype=np.float32)
+        for i in range(n):
+            sums[idx[i]] += values[i]
+        for c in changed:
+            if counts[c] > 0:
+                centers[c] = np.float32(sums[c] / counts[c])
+
+        # Update distances for changed clusters
+        for c in changed:
+            D[:, c] = (values - centers[c]) * (values - centers[c])
+
+        # Handle empty clusters (singleton)
+        empties = [c for c in changed if counts[c] == 0]
+        if empties:
+            d_assigned = D[np.arange(n), idx]
+            for empty in empties:
+                lonely = int(np.argmax(d_assigned))
+                from_cluster = int(idx[lonely])
+                if counts[from_cluster] < 2:
+                    from_cluster = int(np.argmax(counts > 1))
+                    lonely = int(np.argmax(idx == from_cluster))
+
+                centers[empty] = values[lonely]
+                idx[lonely] = empty
+                counts[empty] = 1
+                counts[from_cluster] -= 1
+                D[:, empty] = (values - centers[empty]) * (values - centers[empty])
+
+                # Update donor cluster center/distance
+                sums[from_cluster] = np.float32(0.0)
+                for i in range(n):
+                    if idx[i] == from_cluster:
+                        sums[from_cluster] += values[i]
+                if counts[from_cluster] > 0:
+                    centers[from_cluster] = np.float32(sums[from_cluster] / counts[from_cluster])
+                D[:, from_cluster] = (values - centers[from_cluster]) * (values - centers[from_cluster])
+                changed = np.unique(np.concatenate([changed, np.array([from_cluster], dtype=np.int64)]))
+
+        # Compute objective and check for improvement
+        d_assigned = D[np.arange(n), idx]
+        totsumD = np.sum(d_assigned, dtype=np.float32)
+        if prevtotsumD <= totsumD:
+            idx = previdx
+            counts = np.bincount(idx, minlength=2).astype(np.int64)
+            sums = np.zeros(2, dtype=np.float32)
+            for i in range(n):
+                sums[idx[i]] += values[i]
+            for c in changed:
+                if counts[c] > 0:
+                    centers[c] = np.float32(sums[c] / counts[c])
+            break
+
+        previdx = idx.copy()
+        prevtotsumD = totsumD
+
+        # Reassign using nearest centroid, tie -> stay
+        nidx = np.argmin(D, axis=1).astype(np.int8)
+        dmin = D[np.arange(n), nidx]
+        moved = np.where(nidx != previdx)[0]
+        if moved.size:
+            stay_mask = D[moved, previdx[moved]] > dmin[moved]
+            moved = moved[stay_mask]
+        if moved.size == 0:
+            break
+        idx[moved] = nidx[moved]
+        changed = np.unique(np.concatenate([idx[moved], previdx[moved]]))
+
+    return centers, idx.astype(np.int8)
 
 def kmeans_segment(roi):
     # Match MATLAB im2single for uint8 by explicit float32 scaling.
@@ -26,19 +125,41 @@ def kmeans_segment(roi):
         r = roi.astype(np.float32) / np.float32(255.0)
     else:
         r = roi.astype(np.float32)
-    # compute "dark" and "light" clusters
-    km = KMeans(n_clusters=2, n_init=1, init=np.array([[0], [1]]), max_iter=100)
-    km.fit(r.reshape(-1, 1))
-    J = km.labels_
-    C = km.cluster_centers_
+    # Use column-major order to match MATLAB img(:) traversal.
+    values = r.reshape(-1, order="F")
+    if USE_STRICT_KMEANS:
+        C, J = _kmeans_1d_strict(values, max_iter=100)
+        if C is None:
+            C = None
+    else:
+        C = None
+
+    if C is None:
+        # fallback to sklearn k-means
+        km = KMeans(
+            n_clusters=2,
+            n_init=1,
+            init="k-means++",
+            max_iter=100,
+            tol=0,
+            random_state=KMEANS_FALLBACK_SEED,
+        )
+        km.fit(values.reshape(-1, 1))
+        J = km.labels_
+        C = km.cluster_centers_.reshape(-1)
+    else:
+        C = C.reshape(-1)
+        J = J.reshape(-1)
+
+    # reshape labels to image using MATLAB order
+    J = J.reshape(r.shape, order="F")
     bg_label = np.argmax(C)
     # find the darkest pixel value in the bright (background) cluster
-    roi_1d = r.ravel()
-    darkest_background = np.min(roi_1d[J == bg_label])
+    darkest_background = np.min(r[J == bg_label])
     # use it to compute a threshold
     threshold = darkest_background * DARK_THRESHOLD_ADJUSTMENT
     # extend the background using that threshold (MATLAB uses >)
-    J[roi_1d > threshold] = bg_label
+    J[r > threshold] = bg_label
     # return True for non-background pixels
     return (J != bg_label).reshape(roi.shape)
 
