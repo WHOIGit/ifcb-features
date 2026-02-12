@@ -50,9 +50,9 @@ def _kmeans_1d_strict(values, max_iter=100):
     for _iter in range(max_iter):
         # Recompute centers and counts for changed clusters
         counts = np.bincount(idx, minlength=2).astype(np.int64)
-        sums = np.zeros(2, dtype=np.float32)
+        sums = np.zeros(2, dtype=np.float64)
         for i in range(n):
-            sums[idx[i]] += values[i]
+            sums[idx[i]] += float(values[i])
         for c in changed:
             if counts[c] > 0:
                 centers[c] = np.float32(sums[c] / counts[c])
@@ -79,10 +79,10 @@ def _kmeans_1d_strict(values, max_iter=100):
                 D[:, empty] = (values - centers[empty]) * (values - centers[empty])
 
                 # Update donor cluster center/distance
-                sums[from_cluster] = np.float32(0.0)
+                sums[from_cluster] = np.float64(0.0)
                 for i in range(n):
                     if idx[i] == from_cluster:
-                        sums[from_cluster] += values[i]
+                        sums[from_cluster] += float(values[i])
                 if counts[from_cluster] > 0:
                     centers[from_cluster] = np.float32(sums[from_cluster] / counts[from_cluster])
                 D[:, from_cluster] = (values - centers[from_cluster]) * (values - centers[from_cluster])
@@ -94,9 +94,9 @@ def _kmeans_1d_strict(values, max_iter=100):
         if prevtotsumD <= totsumD:
             idx = previdx
             counts = np.bincount(idx, minlength=2).astype(np.int64)
-            sums = np.zeros(2, dtype=np.float32)
+            sums = np.zeros(2, dtype=np.float64)
             for i in range(n):
-                sums[idx[i]] += values[i]
+                sums[idx[i]] += float(values[i])
             for c in changed:
                 if counts[c] > 0:
                     centers[c] = np.float32(sums[c] / counts[c])
