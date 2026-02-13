@@ -87,9 +87,9 @@ def imrotate_nearest_crop(img, angle_deg):
     x_in = cos_a * x0 - sin_a * y0 + cx
     y_in = sin_a * x0 + cos_a * y0 + cy
 
-    # MATLAB round halves away from zero for positive coords.
-    x_idx = np.floor(x_in + 0.5).astype(np.int64)
-    y_idx = np.floor(y_in + 0.5).astype(np.int64)
+    # MATLAB round: ties away from zero (works for negative too).
+    x_idx = (np.sign(x_in) * np.floor(np.abs(x_in) + 0.5)).astype(np.int64)
+    y_idx = (np.sign(y_in) * np.floor(np.abs(y_in) + 0.5)).astype(np.int64)
 
     out = np.zeros_like(img, dtype=np.bool)
     mask = (x_idx >= 1) & (x_idx <= w) & (y_idx >= 1) & (y_idx <= h)
