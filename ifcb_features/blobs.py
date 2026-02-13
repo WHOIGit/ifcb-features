@@ -19,8 +19,17 @@ def find_blobs(B):
     to those bounding boxes"""
     B = np.array(B).astype(np.bool)
     labeled, objects = label_blobs(B)
-    blobs = [labeled[obj]==ix+1 for ix, obj in zip(range(len(objects)), objects)]
-    return labeled, objects, blobs
+    # Match MATLAB blob_geomprop: sort connected components by area (descending).
+    labeled_objects = [(ix + 1, obj) for ix, obj in enumerate(objects)]
+    def sort_key(item):
+        label_id, obj = item
+        comp = labeled[obj] == label_id
+        area = int(np.sum(comp))
+        return (-area, obj[1].start, obj[0].start)
+    labeled_objects.sort(key=sort_key)
+    objects_sorted = [obj for _, obj in labeled_objects]
+    blobs = [labeled[obj] == label for label, obj in labeled_objects]
+    return labeled, objects_sorted, blobs
 
 def center_blob(B):
     """Center blob on centroid, matching MATLAB center_blob.m."""
