@@ -70,9 +70,21 @@ def distmap_volume_surface_area(B,perimeter_image=None):
     fill = binary_fill_holes(np.array(perimeter_image, dtype=bool))
     D = D.astype(np.float32)
     D[~fill] = np.nan
-    Dm = np.ma.array(D, mask=np.isnan(D))
-    # representative transect
-    x = np.float32(4.0) * np.nanmean(Dm, dtype=np.float32) - np.float32(2.0)
+    # representative transect (match MATLAB float32 sum/mean in column-major order)
+    flat = D.ravel(order="F")
+    nan_mask = np.isnan(flat)
+    count = np.int64(np.sum(~nan_mask))
+    flat = np.where(nan_mask, np.float32(0.0), flat.astype(np.float32))
+    if count == 0:
+        sum_val = np.float32(0.0)
+        mean_val = np.float32(np.nan)
+    else:
+        acc = np.zeros(4, dtype=np.float32)
+        for i, v in enumerate(flat):
+            acc[i % 4] = np.float32(acc[i % 4] + v)
+        sum_val = np.float32(np.sum(acc, dtype=np.float32))
+        mean_val = np.float32(sum_val / np.float32(count))
+    x = np.float32(4.0) * mean_val - np.float32(2.0)
     # diamond correction
     c1 = x**2 / (x**2 + 2*x + 0.5)
     # circle correction
@@ -80,7 +92,7 @@ def distmap_volume_surface_area(B,perimeter_image=None):
     # volume = c1 * c2 * 2 * np.sum(D)
     # compute volume in float32 to match MATLAB single-precision path
     c1 = np.float32(c1)
-    volume = np.float32(c1 * np.float32(np.pi) * np.nansum(D, dtype=np.float32))
+    volume = np.float32(c1 * np.float32(np.pi) * sum_val)
     # surface area
     # surface area uses NaN-masked distances as zero
     D_sa = np.nan_to_num(D, nan=0.0)
