@@ -46,16 +46,18 @@ def center_blob(B):
     s = max(yc, h - yc, xc, w - xc)
     m = int(np.ceil(s * 2))
     C = np.zeros((m, m), dtype=np.bool)
-    # Avoid precision drift at integer boundaries only when very close.
-    val_y = s - yc
-    val_x = s - xc
-    # Snap values extremely close to integers to the integer boundary.
-    if abs(val_y - round(val_y)) < 1e-9:
-        val_y = round(val_y)
-    if abs(val_x - round(val_x)) < 1e-9:
-        val_x = round(val_x)
-    y0 = int(np.floor(val_y))
-    x0 = int(np.floor(val_x))
+    # Integer-exact offsets to avoid float drift.
+    n = ys.size
+    sum_y = int(np.sum(ys))
+    sum_x = int(np.sum(xs))
+    hN = h * n
+    wN = w * n
+    ycN = sum_y
+    xcN = sum_x
+    sN = max(ycN, hN - ycN, xcN, wN - xcN)
+    m = int((2 * sN + n - 1) // n)
+    y0 = int((sN - ycN) // n)
+    x0 = int((sN - xcN) // n)
     C[y0:y0 + h, x0:x0 + w] = B
     return C
 

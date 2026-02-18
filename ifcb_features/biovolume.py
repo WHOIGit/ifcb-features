@@ -45,12 +45,16 @@ def bottom_top_area(X,Y,Z,ignore_ground=False):
     return area_bot, area_top
 
 USE_EDT_INDICES = True  # recompute distances from indices to better match MATLAB bwdist
-# Match legacy MATLAB SOR center logic (pre-e5aaf7f) when True.
+# Match MATLAB SOR center logic (old top-edge + radius) when True.
 SOR_USE_OLD_CENTER = True
+# Use Heidi_explore distmap implementation (bwdist + heidi surface area) when True.
+USE_HEIDI_DISTMAP = False
 
 def distmap_volume_surface_area(B,perimeter_image=None):
     """Moberg & Sosik biovolume algorithm
     returns volume and representative transect"""
+    if USE_HEIDI_DISTMAP:
+        return distmap_volume_surface_area_heidi(B, perimeter_image)
     if perimeter_image is None:
         perimeter_image = find_perimeter(B)
     # elementwise distance to perimeter + 1
@@ -97,6 +101,32 @@ def distmap_volume_surface_area(B,perimeter_image=None):
         + np.nansum(area_top.astype(np.float32), dtype=np.float32)
     )
     # return volume, representative transect, and surface area
+    return volume, x, sa
+
+
+def distmap_volume_surface_area_heidi(B, perimeter_image=None):
+    """Heidi_explore distmap_volume (bwdist + surface area) implementation."""
+    if perimeter_image is None:
+        perimeter_image = find_perimeter(B)
+    # calculate distance map (MATLAB bwdist)
+    D = distance_transform_edt(1 - perimeter_image) + 1
+    # mask distances outside filled perimeter
+    fill = binary_fill_holes(np.array(perimeter_image, dtype=bool))
+    D = D.astype(np.float64)
+    D[~fill] = np.nan
+    # representative transect length
+    x = 4 * np.nanmean(D) - 2
+    # correction factors
+    c1 = (x**2) / (x**2 + 2 * x + 0.5)
+    c2 = np.pi / 2
+    volume = c1 * c2 * 2 * np.nansum(D)
+    # surface area
+    D_sa = np.nan_to_num(D, nan=0.0)
+    h, w = D_sa.shape
+    Y, X = np.mgrid[1:h + 1, 1:w + 1]
+    area_bot, area_top = bottom_top_area(X, Y, D_sa, ignore_ground=True)
+    c = (np.pi * x / 2.0) / (2.0 * np.sqrt(2.0) * x / 2.0 + (1.0 + np.sqrt(2.0)) / 2.0)
+    sa = 2 * c * (np.sum(area_bot) + np.sum(area_top))
     return volume, x, sa
 
 def sor_volume_surface_area(B):
