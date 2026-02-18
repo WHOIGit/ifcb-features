@@ -1,3 +1,4 @@
+import os
 import numpy as np
 
 from scipy.ndimage import binary_fill_holes, distance_transform_edt
@@ -79,10 +80,8 @@ def distmap_volume_surface_area(B,perimeter_image=None):
         sum_val = np.float32(0.0)
         mean_val = np.float32(np.nan)
     else:
-        acc = np.zeros(4, dtype=np.float32)
-        for i, v in enumerate(flat):
-            acc[i % 4] = np.float32(acc[i % 4] + v)
-        sum_val = np.float32(np.sum(acc, dtype=np.float32))
+        # Match MATLAB sum for single arrays: column-major, float32 accumulation.
+        sum_val = np.float32(np.sum(flat, dtype=np.float32))
         mean_val = np.float32(sum_val / np.float32(count))
     x = np.float32(4.0) * mean_val - np.float32(2.0)
     # diamond correction
@@ -93,6 +92,8 @@ def distmap_volume_surface_area(B,perimeter_image=None):
     # compute volume in float32 to match MATLAB single-precision path
     c1 = np.float32(c1)
     volume = np.float32(c1 * np.float32(np.pi) * sum_val)
+    if os.getenv("DISTMAP_DEBUG") == "1":
+        print("distmap_debug sum_val", float(sum_val), "mean_val", float(mean_val), "x", float(x), "volume", float(volume))
     # surface area
     # surface area uses NaN-masked distances as zero
     D_sa = np.nan_to_num(D, nan=0.0)
