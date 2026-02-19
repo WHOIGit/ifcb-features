@@ -3,7 +3,7 @@ import numpy as np
 from scipy.ndimage.measurements import find_objects
 from scipy.spatial import QhullError
 
-from skimage.measure import regionprops
+from skimage.measure import label, regionprops
 
 from functools import lru_cache
 
@@ -45,8 +45,13 @@ class BlobFeatures(object):
     @property
     @lru_cache()
     def regionprops(self):
-        """region props of the blob (assumes single connected region)"""
-        return regionprops(self.image.astype(np.uint8))[0]
+        """region props of the blob (assumes single connected region)."""
+        labels = label(self.image.astype(np.uint8), connectivity=2)
+        props = regionprops(labels)
+        if not props:
+            return None
+        # Use the largest region to match MATLAB's 8-connected component.
+        return max(props, key=lambda p: p.area)
     @property
     @lru_cache()
     def area(self):
