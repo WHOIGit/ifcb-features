@@ -82,21 +82,21 @@ def distmap_volume_surface_area(B,perimeter_image=None):
         mean_val = np.float32(np.nan)
     else:
         if use_deterministic_sum:
-            # Deterministic column-major sum in float64.
-            sum_acc = 0.0
+            # Deterministic column-major sum in float32 (match MATLAB single).
+            sum_acc = np.float32(0.0)
             cnt = 0
             for v, is_nan in zip(flat_raw, nan_mask):
                 if not is_nan:
-                    sum_acc += float(v)
+                    sum_acc = np.float32(sum_acc + np.float32(v))
                     cnt += 1
-            sum_val = np.float64(sum_acc)
-            mean_val = np.float64(sum_acc / float(cnt)) if cnt else np.float64(np.nan)
+            sum_val = np.float32(sum_acc)
+            mean_val = np.float32(sum_acc / np.float32(cnt)) if cnt else np.float32(np.nan)
         else:
             # Match MATLAB sum for single arrays: column-major, float32 accumulation.
             sum_val = np.float32(np.sum(flat, dtype=np.float32))
             mean_val = np.float32(sum_val / np.float32(count))
     if use_deterministic_sum:
-        x = np.float64(4.0) * mean_val - np.float64(2.0)
+        x = np.float32(4.0) * mean_val - np.float32(2.0)
     else:
         x = np.float32(4.0) * mean_val - np.float32(2.0)
     # diamond correction
@@ -105,7 +105,8 @@ def distmap_volume_surface_area(B,perimeter_image=None):
     # c2 = np.pi / 2 
     # volume = c1 * c2 * 2 * np.sum(D)
     if use_deterministic_sum:
-        volume = np.float64(c1 * np.float64(np.pi) * sum_val)
+        c1 = np.float32(c1)
+        volume = np.float32(c1 * np.float32(np.pi) * sum_val)
     else:
         # compute volume in float32 to match MATLAB single-precision path
         c1 = np.float32(c1)
@@ -147,20 +148,20 @@ def distmap_volume_surface_area_heidi(B, perimeter_image=None):
     D[~fill] = np.nan
     # deterministic sum/mean over column-major order to match MATLAB loop
     flat = D.ravel(order="F")
-    sum_acc = 0.0
+    sum_acc = np.float32(0.0)
     cnt = 0
     for v in flat:
         if not np.isnan(v):
-            sum_acc += float(v)
+            sum_acc = np.float32(sum_acc + np.float32(v))
             cnt += 1
-    sum_val = np.float64(sum_acc)
-    mean_val = np.float64(sum_acc / float(cnt)) if cnt else np.float64(np.nan)
+    sum_val = np.float32(sum_acc)
+    mean_val = np.float32(sum_acc / np.float32(cnt)) if cnt else np.float32(np.nan)
     # representative transect length
-    x = 4 * mean_val - 2
+    x = np.float32(4.0) * mean_val - np.float32(2.0)
     # correction factors
     c1 = (x**2) / (x**2 + 2 * x + 0.5)
     c2 = np.pi / 2
-    volume = c1 * c2 * 2 * sum_val
+    volume = np.float32(c1 * np.float32(c2) * np.float32(2.0) * sum_val)
     # surface area
     D_sa = np.nan_to_num(D, nan=0.0)
     h, w = D_sa.shape
