@@ -76,22 +76,40 @@ def distmap_volume_surface_area(B,perimeter_image=None):
     nan_mask = np.isnan(flat)
     count = np.int64(np.sum(~nan_mask))
     flat = np.where(nan_mask, np.float32(0.0), flat.astype(np.float32))
+    use_deterministic_sum = True
     if count == 0:
         sum_val = np.float32(0.0)
         mean_val = np.float32(np.nan)
     else:
-        # Match MATLAB sum for single arrays: column-major, float32 accumulation.
-        sum_val = np.float32(np.sum(flat, dtype=np.float32))
-        mean_val = np.float32(sum_val / np.float32(count))
-    x = np.float32(4.0) * mean_val - np.float32(2.0)
+        if use_deterministic_sum:
+            # Deterministic column-major sum in float64.
+            sum_acc = 0.0
+            cnt = 0
+            for v in flat:
+                if not np.isnan(v):
+                    sum_acc += float(v)
+                    cnt += 1
+            sum_val = np.float64(sum_acc)
+            mean_val = np.float64(sum_acc / float(cnt)) if cnt else np.float64(np.nan)
+        else:
+            # Match MATLAB sum for single arrays: column-major, float32 accumulation.
+            sum_val = np.float32(np.sum(flat, dtype=np.float32))
+            mean_val = np.float32(sum_val / np.float32(count))
+    if use_deterministic_sum:
+        x = np.float64(4.0) * mean_val - np.float64(2.0)
+    else:
+        x = np.float32(4.0) * mean_val - np.float32(2.0)
     # diamond correction
     c1 = x**2 / (x**2 + 2*x + 0.5)
     # circle correction
     # c2 = np.pi / 2 
     # volume = c1 * c2 * 2 * np.sum(D)
-    # compute volume in float32 to match MATLAB single-precision path
-    c1 = np.float32(c1)
-    volume = np.float32(c1 * np.float32(np.pi) * sum_val)
+    if use_deterministic_sum:
+        volume = np.float64(c1 * np.float64(np.pi) * sum_val)
+    else:
+        # compute volume in float32 to match MATLAB single-precision path
+        c1 = np.float32(c1)
+        volume = np.float32(c1 * np.float32(np.pi) * sum_val)
     if os.getenv("DISTMAP_DEBUG") == "1":
         print("distmap_debug sum_val", float(sum_val), "mean_val", float(mean_val), "x", float(x), "volume", float(volume))
     # surface area
