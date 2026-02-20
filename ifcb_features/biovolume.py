@@ -49,7 +49,7 @@ USE_EDT_INDICES = True  # recompute distances from indices to better match MATLA
 # Match MATLAB SOR center logic (old top-edge + radius) when True.
 SOR_USE_OLD_CENTER = True
 # Use Heidi_explore distmap implementation (bwdist + heidi surface area) when True.
-USE_HEIDI_DISTMAP = False
+USE_HEIDI_DISTMAP = True
 
 def distmap_volume_surface_area(B,perimeter_image=None):
     """Moberg & Sosik biovolume algorithm
