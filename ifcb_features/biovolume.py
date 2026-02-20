@@ -72,10 +72,10 @@ def distmap_volume_surface_area(B,perimeter_image=None):
     D = D.astype(np.float32)
     D[~fill] = np.nan
     # representative transect (match MATLAB float32 sum/mean in column-major order)
-    flat = D.ravel(order="F")
-    nan_mask = np.isnan(flat)
+    flat_raw = D.ravel(order="F")
+    nan_mask = np.isnan(flat_raw)
     count = np.int64(np.sum(~nan_mask))
-    flat = np.where(nan_mask, np.float32(0.0), flat.astype(np.float32))
+    flat = np.where(nan_mask, np.float32(0.0), flat_raw.astype(np.float32))
     use_deterministic_sum = True
     if count == 0:
         sum_val = np.float32(0.0)
@@ -85,8 +85,8 @@ def distmap_volume_surface_area(B,perimeter_image=None):
             # Deterministic column-major sum in float64.
             sum_acc = 0.0
             cnt = 0
-            for v in flat:
-                if not np.isnan(v):
+            for v, is_nan in zip(flat_raw, nan_mask):
+                if not is_nan:
                     sum_acc += float(v)
                     cnt += 1
             sum_val = np.float64(sum_acc)
