@@ -145,12 +145,22 @@ def distmap_volume_surface_area_heidi(B, perimeter_image=None):
     fill = binary_fill_holes(np.array(perimeter_image, dtype=bool))
     D = D.astype(np.float64)
     D[~fill] = np.nan
+    # deterministic sum/mean over column-major order to match MATLAB loop
+    flat = D.ravel(order="F")
+    sum_acc = 0.0
+    cnt = 0
+    for v in flat:
+        if not np.isnan(v):
+            sum_acc += float(v)
+            cnt += 1
+    sum_val = np.float64(sum_acc)
+    mean_val = np.float64(sum_acc / float(cnt)) if cnt else np.float64(np.nan)
     # representative transect length
-    x = 4 * np.nanmean(D) - 2
+    x = 4 * mean_val - 2
     # correction factors
     c1 = (x**2) / (x**2 + 2 * x + 0.5)
     c2 = np.pi / 2
-    volume = c1 * c2 * 2 * np.nansum(D)
+    volume = c1 * c2 * 2 * sum_val
     # surface area
     D_sa = np.nan_to_num(D, nan=0.0)
     h, w = D_sa.shape
