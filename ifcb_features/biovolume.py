@@ -45,6 +45,14 @@ def bottom_top_area(X,Y,Z,ignore_ground=False):
         
     return area_bot, area_top
 
+def _det_sum32(arr):
+    """Deterministic float32 sum in column-major order."""
+    sum_acc = np.float32(0.0)
+    flat = arr.ravel(order="F")
+    for v in flat:
+        sum_acc = np.float32(sum_acc + np.float32(v))
+    return np.float32(sum_acc)
+
 USE_EDT_INDICES = True  # recompute distances from indices to better match MATLAB bwdist
 # Match MATLAB SOR center logic (old top-edge + radius) when True.
 SOR_USE_OLD_CENTER = True
@@ -128,10 +136,9 @@ def distmap_volume_surface_area(B,perimeter_image=None):
         np.float32(2.0) * np.float32(np.sqrt(2.0)) * x / np.float32(2.0)
         + (np.float32(1.0) + np.float32(np.sqrt(2.0))) / np.float32(2.0)
     )
-    sa = np.float32(2.0) * c * np.float32(
-        np.nansum(area_bot.astype(np.float32), dtype=np.float32)
-        + np.nansum(area_top.astype(np.float32), dtype=np.float32)
-    )
+    sum_bot = _det_sum32(area_bot.astype(np.float32))
+    sum_top = _det_sum32(area_top.astype(np.float32))
+    sa = np.float32(2.0) * c * np.float32(sum_bot + sum_top)
     # return volume, representative transect, and surface area
     return volume, x, sa
 
@@ -168,7 +175,9 @@ def distmap_volume_surface_area_heidi(B, perimeter_image=None):
     Y, X = np.mgrid[1:h + 1, 1:w + 1]
     area_bot, area_top = bottom_top_area(X, Y, D_sa, ignore_ground=True)
     c = (np.pi * x / 2.0) / (2.0 * np.sqrt(2.0) * x / 2.0 + (1.0 + np.sqrt(2.0)) / 2.0)
-    sa = 2 * c * (np.sum(area_bot) + np.sum(area_top))
+    sum_bot = _det_sum32(area_bot.astype(np.float32))
+    sum_top = _det_sum32(area_top.astype(np.float32))
+    sa = np.float32(2.0) * np.float32(c) * np.float32(sum_bot + sum_top)
     return volume, x, sa
 
 def sor_volume_surface_area(B):
