@@ -210,6 +210,15 @@ class BlobFeatures(object):
         """volume of blob computed via Moberg & Sosik algorithm"""
         # MATLAB uses a tight cropped blob image for distmap via regionprops.Image.
         img = self.regionprops.image.astype(bool)
+        # Match MATLAB blob_geomprop: use largest 8-connected component.
+        if img.any():
+            from scipy.ndimage import label
+            labeled, num = label(img, structure=np.ones((3, 3), dtype=np.int32))
+            if num > 1:
+                counts = np.bincount(labeled.ravel())
+                counts[0] = 0
+                largest = counts.argmax()
+                img = labeled == largest
         perim = find_perimeter(img)
         return distmap_volume_surface_area(img, perim)
     @property
