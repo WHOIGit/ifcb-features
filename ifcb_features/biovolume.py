@@ -132,8 +132,9 @@ def distmap_volume_surface_area(B,perimeter_image=None):
     area_bot, area_top = bottom_top_area(X, Y, D_sa, ignore_ground=True)
     # final correction of the diamond cross-section
     # inherent in the distance map to be circular instead
-    c = (np.float32(np.pi) * x / np.float32(2.0)) / (
-        np.float32(2.0) * np.float32(np.sqrt(2.0)) * x / np.float32(2.0)
+    # compute c fully in float32 to match MATLAB single-precision path
+    c = (np.float32(np.pi) * np.float32(x) / np.float32(2.0)) / (
+        np.float32(2.0) * np.float32(np.sqrt(2.0)) * np.float32(x) / np.float32(2.0)
         + (np.float32(1.0) + np.float32(np.sqrt(2.0))) / np.float32(2.0)
     )
     sum_bot = _det_sum32(area_bot.astype(np.float32))
@@ -166,9 +167,9 @@ def distmap_volume_surface_area_heidi(B, perimeter_image=None):
     # representative transect length
     x = np.float32(4.0) * mean_val - np.float32(2.0)
     # correction factors
-    c1 = (x**2) / (x**2 + 2 * x + 0.5)
-    c2 = np.pi / 2
-    volume = np.float32(c1 * np.float32(c2) * np.float32(2.0) * sum_val)
+    c1 = (x**2) / (x**2 + np.float32(2.0) * x + np.float32(0.5))
+    c2 = np.float32(np.pi / 2.0)
+    volume = np.float32(c1 * c2 * np.float32(2.0) * sum_val)
     # surface area
     D_sa = np.nan_to_num(D, nan=0.0).astype(np.float32, copy=False)
     h, w = D_sa.shape
@@ -176,7 +177,11 @@ def distmap_volume_surface_area_heidi(B, perimeter_image=None):
     X = X.astype(np.float32, copy=False)
     Y = Y.astype(np.float32, copy=False)
     area_bot, area_top = bottom_top_area(X, Y, D_sa, ignore_ground=True)
-    c = (np.pi * x / 2.0) / (2.0 * np.sqrt(2.0) * x / 2.0 + (1.0 + np.sqrt(2.0)) / 2.0)
+    # compute c fully in float32 to match MATLAB single-precision path
+    c = (np.float32(np.pi) * np.float32(x) / np.float32(2.0)) / (
+        np.float32(2.0) * np.float32(np.sqrt(2.0)) * np.float32(x) / np.float32(2.0)
+        + (np.float32(1.0) + np.float32(np.sqrt(2.0))) / np.float32(2.0)
+    )
     sum_bot = _det_sum32(area_bot.astype(np.float32))
     sum_top = _det_sum32(area_top.astype(np.float32))
     sa = np.float32(2.0) * np.float32(c) * np.float32(sum_bot + sum_top)
