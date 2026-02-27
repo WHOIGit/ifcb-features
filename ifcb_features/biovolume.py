@@ -170,9 +170,11 @@ def distmap_volume_surface_area_heidi(B, perimeter_image=None):
     c2 = np.pi / 2
     volume = np.float32(c1 * np.float32(c2) * np.float32(2.0) * sum_val)
     # surface area
-    D_sa = np.nan_to_num(D, nan=0.0)
+    D_sa = np.nan_to_num(D, nan=0.0).astype(np.float32, copy=False)
     h, w = D_sa.shape
     Y, X = np.mgrid[1:h + 1, 1:w + 1]
+    X = X.astype(np.float32, copy=False)
+    Y = Y.astype(np.float32, copy=False)
     area_bot, area_top = bottom_top_area(X, Y, D_sa, ignore_ground=True)
     c = (np.pi * x / 2.0) / (2.0 * np.sqrt(2.0) * x / 2.0 + (1.0 + np.sqrt(2.0)) / 2.0)
     sum_bot = _det_sum32(area_bot.astype(np.float32))
