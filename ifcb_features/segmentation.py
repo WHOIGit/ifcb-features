@@ -1,12 +1,9 @@
 import numpy as np
 
-from skimage import img_as_float32
 from scipy.ndimage import label
 from scipy.ndimage.morphology import binary_fill_holes
-from skimage.morphology import binary_closing, binary_dilation, binary_erosion, remove_small_objects, diamond
+from skimage.morphology import binary_closing, binary_dilation, binary_erosion, diamond
 import skimage.filters as imfilters
-
-from skimage.util import img_as_ubyte
 
 from .phasecong import phasecong_Mm
 from .morphology import SE3, hysthresh, bwmorph_thin, EIGHT
