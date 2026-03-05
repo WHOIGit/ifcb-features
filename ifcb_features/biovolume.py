@@ -100,7 +100,7 @@ def distmap_volume_surface_area(B, perimeter_image=None):
 def sor_volume_surface_area(B):
     """pass in rotated blob"""
     """Sosik and Kilfoyle surface area / volume algorithm"""
-    # compute center using median (current) or bottom+radius (legacy MATLAB)
+    # compute center as top-edge + radius to match MATLAB
     r = np.sum(B, axis=0).astype(np.float64)
     ri = r > 0
     r = (r / 2.0)[ri]
