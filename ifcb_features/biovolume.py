@@ -101,7 +101,6 @@ def sor_volume_surface_area(B):
     """pass in rotated blob"""
     """Sosik and Kilfoyle surface area / volume algorithm"""
     # compute center using median (current) or bottom+radius (legacy MATLAB)
-    h, w = B.shape
     r = np.sum(B, axis=0).astype(np.float64)
     ri = r > 0
     r = (r / 2.0)[ri]
