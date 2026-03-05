@@ -22,12 +22,11 @@ from .hog import image_hog
 from .ringwedge import ring_wedge, _N_RINGS, _N_WEDGES
 
 class BlobFeatures(object):
-    def __init__(self,blob_image,roi_image, roi=None):
+    def __init__(self,blob_image,roi_image):
         """roi_image should be the same size as the blob image,
         so a sub-roi"""
         self.image = np.array(blob_image).astype(np.bool)
         self.roi_image = roi_image
-        self.roi = roi
     @property
     def shape(self):
         """h,w of blob image"""
@@ -342,7 +341,7 @@ class RoiFeatures(object):
         the segmented mask, ordered by largest area to smallest area"""
         labeled, bboxes, blobs = find_blobs(self.blobs_image)
         cropped_rois = [self.image[bbox] for bbox in bboxes]
-        Bs = [BlobFeatures(b, R, roi=self) for b, R in zip(blobs, cropped_rois)]
+        Bs = [BlobFeatures(b, R) for b, R in zip(blobs, cropped_rois)]
         # sort by area, largest first
         return sorted(Bs, key=lambda B: B.area, reverse=True)
     @property
@@ -548,9 +547,11 @@ def compute_features(roi_image, blobs_image=None, raw_stitch=None):
         ('summedPerimeter', r.summed_perimeter),
         ('summedSurfaceArea', r.summed_surface_area),
     ]
+    def _zero_to_nan(v):
+        return float('nan') if v == 0 else v
     f += [
-        ('Area_over_PerimeterSquared', b.area_over_perimeter_squared),
-        ('Area_over_Perimeter', b.area_over_perimeter),
-        ('summedConvexPerimeter_over_Perimeter', r.summed_convex_perimeter_over_perimeter),
+        ('Area_over_PerimeterSquared', _zero_to_nan(b.area_over_perimeter_squared)),
+        ('Area_over_Perimeter', _zero_to_nan(b.area_over_perimeter)),
+        ('summedConvexPerimeter_over_Perimeter', _zero_to_nan(r.summed_convex_perimeter_over_perimeter)),
     ]
     return (r.blobs_image, f)
