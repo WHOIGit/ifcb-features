@@ -1,4 +1,3 @@
-import os
 import numpy as np
 
 from skimage import img_as_float32
@@ -6,7 +5,6 @@ from scipy.ndimage import label
 from scipy.ndimage.morphology import binary_fill_holes
 from skimage.morphology import binary_closing, binary_dilation, binary_erosion, remove_small_objects, diamond
 import skimage.filters as imfilters
-from sklearn.cluster import KMeans
 
 from skimage.util import img_as_ubyte
 
@@ -20,13 +18,6 @@ SED = diamond(1)
 HT_T1, HT_T2 = 0.3, 0.09
 BLOB_MIN = 40
 DARK_THRESHOLD_ADJUSTMENT = 0.75
-USE_STRICT_KMEANS = True
-KMEANS_FALLBACK_SEED = os.getenv("IFCB_KMEANS_FALLBACK_SEED")
-if KMEANS_FALLBACK_SEED is not None:
-    try:
-        KMEANS_FALLBACK_SEED = int(KMEANS_FALLBACK_SEED)
-    except ValueError:
-        KMEANS_FALLBACK_SEED = None
 
 
 def _kmeans_1d_strict(values, max_iter=100):
@@ -127,29 +118,9 @@ def kmeans_segment(roi):
         r = roi.astype(np.float32)
     # Use column-major order to match MATLAB img(:) traversal.
     values = r.reshape(-1, order="F")
-    if USE_STRICT_KMEANS:
-        C, J = _kmeans_1d_strict(values, max_iter=100)
-        if C is None:
-            C = None
-    else:
-        C = None
-
-    if C is None:
-        # fallback to sklearn k-means
-        km = KMeans(
-            n_clusters=2,
-            n_init=1,
-            init="k-means++",
-            max_iter=100,
-            tol=0,
-            random_state=KMEANS_FALLBACK_SEED,
-        )
-        km.fit(values.reshape(-1, 1))
-        J = km.labels_
-        C = km.cluster_centers_.reshape(-1)
-    else:
-        C = C.reshape(-1)
-        J = J.reshape(-1)
+    C, J = _kmeans_1d_strict(values, max_iter=100)
+    C = C.reshape(-1)
+    J = J.reshape(-1)
 
     # reshape labels to image using MATLAB order
     J = J.reshape(r.shape, order="F")
