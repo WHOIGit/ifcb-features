@@ -1,4 +1,3 @@
-import os
 import numpy as np
 
 from scipy.ndimage import binary_fill_holes, distance_transform_edt
@@ -53,99 +52,12 @@ def _det_sum32(arr):
         sum_acc = np.float32(sum_acc + np.float32(v))
     return np.float32(sum_acc)
 
-USE_EDT_INDICES = True  # recompute distances from indices to better match MATLAB bwdist
 # Match MATLAB SOR center logic (old top-edge + radius) when True.
 SOR_USE_OLD_CENTER = True
-# Use Heidi_explore distmap implementation (bwdist + heidi surface area) when True.
-USE_HEIDI_DISTMAP = True
 
-def distmap_volume_surface_area(B,perimeter_image=None):
-    """Moberg & Sosik biovolume algorithm
-    returns volume and representative transect"""
-    if USE_HEIDI_DISTMAP:
-        return distmap_volume_surface_area_heidi(B, perimeter_image)
-    if perimeter_image is None:
-        perimeter_image = find_perimeter(B)
-    # elementwise distance to perimeter + 1
-    if USE_EDT_INDICES:
-        _, inds = distance_transform_edt(1 - perimeter_image, return_indices=True)
-        coords = np.indices(perimeter_image.shape, dtype=np.int64)
-        deltas = coords - inds.astype(np.int64, copy=False)
-        dist2 = np.sum(deltas * deltas, axis=0, dtype=np.int64)
-        D = np.sqrt(dist2.astype(np.float32)) + np.float32(1.0)
-    else:
-        D = distance_transform_edt(1 - perimeter_image) + 1
-    # mask distances outside filled perimeter (match MATLAB imfill on boundary image)
-    fill = binary_fill_holes(np.array(perimeter_image, dtype=bool))
-    D = D.astype(np.float32)
-    D[~fill] = np.nan
-    # representative transect (match MATLAB float32 sum/mean in column-major order)
-    flat_raw = D.ravel(order="F")
-    nan_mask = np.isnan(flat_raw)
-    count = np.int64(np.sum(~nan_mask))
-    flat = np.where(nan_mask, np.float32(0.0), flat_raw.astype(np.float32))
-    use_deterministic_sum = True
-    if count == 0:
-        sum_val = np.float32(0.0)
-        mean_val = np.float32(np.nan)
-    else:
-        if use_deterministic_sum:
-            # Deterministic column-major sum in float32 (match MATLAB single).
-            sum_acc = np.float32(0.0)
-            cnt = 0
-            for v, is_nan in zip(flat_raw, nan_mask):
-                if not is_nan:
-                    sum_acc = np.float32(sum_acc + np.float32(v))
-                    cnt += 1
-            sum_val = np.float32(sum_acc)
-            mean_val = np.float32(sum_acc / np.float32(cnt)) if cnt else np.float32(np.nan)
-        else:
-            # Match MATLAB sum for single arrays: column-major, float32 accumulation.
-            sum_val = np.float32(np.sum(flat, dtype=np.float32))
-            mean_val = np.float32(sum_val / np.float32(count))
-    if use_deterministic_sum:
-        x = np.float32(4.0) * mean_val - np.float32(2.0)
-    else:
-        x = np.float32(4.0) * mean_val - np.float32(2.0)
-    # diamond correction
-    c1 = x**2 / (x**2 + 2*x + 0.5)
-    # circle correction
-    # c2 = np.pi / 2 
-    # volume = c1 * c2 * 2 * np.sum(D)
-    if use_deterministic_sum:
-        c1 = np.float32(c1)
-        volume = np.float32(c1 * np.float32(np.pi) * sum_val)
-    else:
-        # compute volume in float32 to match MATLAB single-precision path
-        c1 = np.float32(c1)
-        volume = np.float32(c1 * np.float32(np.pi) * sum_val)
-    if os.getenv("DISTMAP_DEBUG") == "1":
-        print("distmap_debug sum_val", float(sum_val), "mean_val", float(mean_val), "x", float(x), "volume", float(volume))
-    # surface area
-    # surface area uses NaN-masked distances as zero
-    D_sa = np.nan_to_num(D, nan=0.0)
-    h, w = D_sa.shape
-    # MATLAB uses 1-based X/Y indices for surface area geometry.
-    Y, X = np.mgrid[1:h + 1, 1:w + 1]
-    X = X.astype(np.float32, copy=False)
-    Y = Y.astype(np.float32, copy=False)
-    area_bot, area_top = bottom_top_area(X, Y, D_sa, ignore_ground=True)
-    # final correction of the diamond cross-section
-    # inherent in the distance map to be circular instead
-    # compute c fully in float32 to match MATLAB single-precision path
-    c = (np.float32(np.pi) * np.float32(x) / np.float32(2.0)) / (
-        np.float32(2.0) * np.float32(np.sqrt(2.0)) * np.float32(x) / np.float32(2.0)
-        + (np.float32(1.0) + np.float32(np.sqrt(2.0))) / np.float32(2.0)
-    )
-    sum_bot = _det_sum32(area_bot.astype(np.float32))
-    sum_top = _det_sum32(area_top.astype(np.float32))
-    sa = np.float32(2.0) * c * np.float32(sum_bot + sum_top)
-    # return volume, representative transect, and surface area
-    return volume, x, sa
-
-
-def distmap_volume_surface_area_heidi(B, perimeter_image=None):
-    """Heidi_explore distmap_volume (bwdist + surface area) implementation."""
+def distmap_volume_surface_area(B, perimeter_image=None):
+    """Moberg & Sosik biovolume algorithm (Heidi_explore implementation).
+    Returns volume, representative transect, and surface area."""
     if perimeter_image is None:
         perimeter_image = find_perimeter(B)
     # calculate distance map (MATLAB bwdist)
