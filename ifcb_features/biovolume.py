@@ -52,8 +52,6 @@ def _det_sum32(arr):
         sum_acc = np.float32(sum_acc + np.float32(v))
     return np.float32(sum_acc)
 
-# Match MATLAB SOR center logic (old top-edge + radius) when True.
-SOR_USE_OLD_CENTER = True
 
 def distmap_volume_surface_area(B, perimeter_image=None):
     """Moberg & Sosik biovolume algorithm (Heidi_explore implementation).
@@ -107,17 +105,9 @@ def sor_volume_surface_area(B):
     r = np.sum(B, axis=0).astype(np.float64)
     ri = r > 0
     r = (r / 2.0)[ri]
-    if SOR_USE_OLD_CENTER:
-        y1 = np.argmax(B, axis=0).astype(np.float64) + 1.0
-        y1 = y1[ri]
-        center = y1 + r
-    else:
-        rowind = np.arange(1, h + 1, dtype=np.float64)[:, None]
-        temp = rowind * B
-        temp = temp.astype(np.float64, copy=False)
-        temp[temp == 0] = np.nan
-        center = np.nanmedian(temp, axis=0) + 0.5
-        center = center[ri]
+    y1 = np.argmax(B, axis=0).astype(np.float64) + 1.0
+    y1 = y1[ri]
+    center = y1 + r
     n_slices = r.size
     # compute angles between 0 and 180 degrees inclusive, in radians
     da = 0.25
