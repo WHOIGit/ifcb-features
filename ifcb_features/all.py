@@ -8,7 +8,7 @@ from skimage.measure import label, regionprops
 from functools import lru_cache
 
 from .segmentation import segment_roi
-from .blobs import find_blobs, label_blobs, rotate_blob, blob_shape
+from .blobs import find_blobs, rotate_blob, blob_shape
 from .blob_geometry import (equiv_diameter, ellipse_properties,
                             invmoments, convex_hull, convex_hull_image,
                             convex_hull_properties, feret_diameter,
@@ -344,19 +344,6 @@ class RoiFeatures(object):
         Bs = [BlobFeatures(b, R) for b, R in zip(blobs, cropped_rois)]
         # sort by area, largest first
         return sorted(Bs, key=lambda B: B.area, reverse=True)
-    @property
-    @lru_cache()
-    def largest_blob_mask_full(self):
-        """full-size mask for the largest blob (MATLAB uses full-size mask for biovolume)"""
-        labeled, objects = label_blobs(self.blobs_image)
-        if not objects:
-            return None
-        # labels are 1-based in labeled image
-        areas = []
-        for ix in range(1, len(objects) + 1):
-            areas.append(int(np.sum(labeled == ix)))
-        idx = int(np.argmax(areas)) + 1
-        return labeled == idx
     @property
     def num_blobs(self):
         return len(self.blobs)
