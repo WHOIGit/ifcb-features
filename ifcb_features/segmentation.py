@@ -36,11 +36,35 @@ def _kmeans_1d_strict(values, max_iter=100):
     if n == 0:
         return np.array([0.0, 1.0], dtype=np.float32), np.zeros(0, dtype=np.int8)
 
+    def center_for_cluster(idx, cluster):
+        total = np.float32(0.0)
+        count = np.float32(0.0)
+        for i in range(n):
+            if idx[i] == cluster:
+                total = np.float32(total + values[i])
+                count = np.float32(count + np.float32(1.0))
+        if count == 0:
+            return np.float32(np.nan), 0
+        return np.float32(total / count), int(count)
+
+    def distances_to_center(center):
+        distances = np.empty(n, dtype=np.float32)
+        for i in range(n):
+            delta = np.float32(values[i] - center)
+            distances[i] = np.float32(delta * delta)
+        return distances
+
+    def assigned_total(distances, idx):
+        total = np.float32(0.0)
+        for i in range(n):
+            total = np.float32(total + distances[i, idx[i]])
+        return total
+
     centers = np.array([0.0, 1.0], dtype=np.float32)
     # Initial distances/assignments from provided centers
     D = np.empty((n, 2), dtype=np.float32)
-    D[:, 0] = (values - centers[0]) * (values - centers[0])
-    D[:, 1] = (values - centers[1]) * (values - centers[1])
+    D[:, 0] = distances_to_center(centers[0])
+    D[:, 1] = distances_to_center(centers[1])
     idx = np.argmin(D, axis=1).astype(np.int8)
 
     changed = np.array([0, 1], dtype=np.int64)
@@ -50,16 +74,13 @@ def _kmeans_1d_strict(values, max_iter=100):
     for _iter in range(max_iter):
         # Recompute centers and counts for changed clusters
         counts = np.bincount(idx, minlength=2).astype(np.int64)
-        sums = np.zeros(2, dtype=np.float64)
-        for i in range(n):
-            sums[idx[i]] += float(values[i])
         for c in changed:
             if counts[c] > 0:
-                centers[c] = np.float32(sums[c] / counts[c])
+                centers[c], counts[c] = center_for_cluster(idx, c)
 
         # Update distances for changed clusters
         for c in changed:
-            D[:, c] = (values - centers[c]) * (values - centers[c])
+            D[:, c] = distances_to_center(centers[c])
 
         # Handle empty clusters (singleton)
         empties = [c for c in changed if counts[c] == 0]
@@ -76,30 +97,22 @@ def _kmeans_1d_strict(values, max_iter=100):
                 idx[lonely] = empty
                 counts[empty] = 1
                 counts[from_cluster] -= 1
-                D[:, empty] = (values - centers[empty]) * (values - centers[empty])
+                D[:, empty] = distances_to_center(centers[empty])
 
                 # Update donor cluster center/distance
-                sums[from_cluster] = np.float64(0.0)
-                for i in range(n):
-                    if idx[i] == from_cluster:
-                        sums[from_cluster] += float(values[i])
                 if counts[from_cluster] > 0:
-                    centers[from_cluster] = np.float32(sums[from_cluster] / counts[from_cluster])
-                D[:, from_cluster] = (values - centers[from_cluster]) * (values - centers[from_cluster])
+                    centers[from_cluster], counts[from_cluster] = center_for_cluster(idx, from_cluster)
+                D[:, from_cluster] = distances_to_center(centers[from_cluster])
                 changed = np.unique(np.concatenate([changed, np.array([from_cluster], dtype=np.int64)]))
 
         # Compute objective and check for improvement
-        d_assigned = D[np.arange(n), idx]
-        totsumD = np.sum(d_assigned, dtype=np.float32)
+        totsumD = assigned_total(D, idx)
         if prevtotsumD <= totsumD:
             idx = previdx
             counts = np.bincount(idx, minlength=2).astype(np.int64)
-            sums = np.zeros(2, dtype=np.float64)
-            for i in range(n):
-                sums[idx[i]] += float(values[i])
             for c in changed:
                 if counts[c] > 0:
-                    centers[c] = np.float32(sums[c] / counts[c])
+                    centers[c], counts[c] = center_for_cluster(idx, c)
             break
 
         previdx = idx.copy()
