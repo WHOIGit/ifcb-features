@@ -2,8 +2,6 @@ import numpy as np
 
 from scipy.ndimage import measurements
 
-from scipy.ndimage import rotate as nd_rotate
-
 from .morphology import SE2, SE3, EIGHT, bwmorph_thin
 
 def label_blobs(B):
