@@ -23,30 +23,24 @@ def _kmeans_1d_strict(values, max_iter=100):
     n = values.shape[0]
     if n == 0:
         return np.array([0.0, 1.0], dtype=np.float32), np.zeros(0, dtype=np.int8)
+    row_indices = np.arange(n)
 
     def center_for_cluster(idx, cluster):
-        total = np.float32(0.0)
-        count = np.float32(0.0)
-        for i in range(n):
-            if idx[i] == cluster:
-                total = np.float32(total + values[i])
-                count = np.float32(count + np.float32(1.0))
+        members = idx == cluster
+        count = int(np.count_nonzero(members))
         if count == 0:
             return np.float32(np.nan), 0
-        return np.float32(total / count), int(count)
+        total = np.cumsum(values[members], dtype=np.float32)[-1]
+        count_float = np.float32(count)
+        return np.float32(total / count_float), count
 
     def distances_to_center(center):
-        distances = np.empty(n, dtype=np.float32)
-        for i in range(n):
-            delta = np.float32(values[i] - center)
-            distances[i] = np.float32(delta * delta)
-        return distances
+        delta = values - np.float32(center)
+        return np.asarray(delta * delta, dtype=np.float32)
 
     def assigned_total(distances, idx):
-        total = np.float32(0.0)
-        for i in range(n):
-            total = np.float32(total + distances[i, idx[i]])
-        return total
+        assigned = distances[row_indices, idx]
+        return np.cumsum(assigned, dtype=np.float32)[-1]
 
     centers = np.array([0.0, 1.0], dtype=np.float32)
     # Initial distances/assignments from provided centers
@@ -73,7 +67,7 @@ def _kmeans_1d_strict(values, max_iter=100):
         # Handle empty clusters (singleton)
         empties = [c for c in changed if counts[c] == 0]
         if empties:
-            d_assigned = D[np.arange(n), idx]
+            d_assigned = D[row_indices, idx]
             for empty in empties:
                 lonely = int(np.argmax(d_assigned))
                 from_cluster = int(idx[lonely])
@@ -108,7 +102,7 @@ def _kmeans_1d_strict(values, max_iter=100):
 
         # Reassign using nearest centroid, tie -> stay
         nidx = np.argmin(D, axis=1).astype(np.int8)
-        dmin = D[np.arange(n), nidx]
+        dmin = D[row_indices, nidx]
         moved = np.where(nidx != previdx)[0]
         if moved.size:
             stay_mask = D[moved, previdx[moved]] > dmin[moved]
