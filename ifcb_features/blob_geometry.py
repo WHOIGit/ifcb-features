@@ -43,6 +43,48 @@ def ellipse_properties(B):
     
     return maj_axis, min_axis, ecc, orientation
 
+
+def explicit_orientation(B):
+    """Deterministic blob orientation in degrees for MATLAB/Python parity."""
+    B = np.array(B).astype(np.bool)
+    rows, cols = np.indices(B.shape, dtype=np.float64)
+    x = (cols + 1.0).ravel(order='C')
+    y = (rows + 1.0).ravel(order='C')
+    f = B.astype(np.float64).ravel(order='C')
+
+    m00 = np.float64(0.0)
+    m10 = np.float64(0.0)
+    m01 = np.float64(0.0)
+    for xi, yi, fi in zip(x, y, f):
+        m00 = np.float64(m00 + np.float64(fi))
+        m10 = np.float64(m10 + np.float64(xi * fi))
+        m01 = np.float64(m01 + np.float64(yi * fi))
+
+    if m00 == 0:
+        return 0.0
+
+    xbar = np.float64(m10 / m00)
+    ybar = np.float64(m01 / m00)
+
+    mu20 = np.float64(0.0)
+    mu02 = np.float64(0.0)
+    mu11 = np.float64(0.0)
+    for xi, yi, fi in zip(x, y, f):
+        dx = np.float64(xi - xbar)
+        dy = np.float64(yi - ybar)
+        mu20 = np.float64(mu20 + np.float64(dx * dx * fi))
+        mu02 = np.float64(mu02 + np.float64(dy * dy * fi))
+        mu11 = np.float64(mu11 + np.float64(dx * dy * fi))
+
+    theta = np.float64(-0.5) * np.float64(
+        np.degrees(np.arctan2(np.float64(2.0) * mu11, mu20 - mu02))
+    )
+    while theta > 90.0:
+        theta = np.float64(theta - 180.0)
+    while theta <= -90.0:
+        theta = np.float64(theta + 180.0)
+    return float(theta)
+
 def invmoments(B):
     """compute invariant moments. see
     Digital Image Processing Using MATLAB, ch. 11"""
@@ -181,4 +223,3 @@ def binary_symmetry(B):
     # flipped across horizontal (major) axis
     bflip = ss(np.flipud(B))
     return b180, b90, bflip
-

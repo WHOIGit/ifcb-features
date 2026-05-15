@@ -71,21 +71,58 @@ def imrotate_nearest_crop(img, angle_deg):
     """MATLAB-compatible imrotate(..., 'nearest', 'crop') for binary masks."""
     img = np.array(img).astype(np.bool)
     h, w = img.shape
-    # MATLAB uses 1-based coordinates, center at (w+1)/2, (h+1)/2
-    cx = (w + 1) / 2.0
-    cy = (h + 1) / 2.0
 
-    yy, xx = np.indices((h, w))
-    x = xx + 1.0
-    y = yy + 1.0
-    x0 = x - cx
-    y0 = y - cy
+    # MATLAB blob_rotate calls imrotate(centered, -Orientation, ...).  The
+    # Python caller passes the already sign-adjusted orientation, so use the
+    # opposite angle for MATLAB's affine2d/imwarp coordinate convention.
+    ang = np.deg2rad(-angle_deg)
+    cos_a = np.cos(ang)
+    sin_a = np.sin(ang)
 
-    ang = np.deg2rad(angle_deg)
-    cos_a = np.cos(-ang)
-    sin_a = np.sin(-ang)
-    x_in = cos_a * x0 - sin_a * y0 + cx
-    y_in = sin_a * x0 + cos_a * y0 + cy
+    # imrotate's general-rotation crop path is:
+    #   RA = imref2d(size(A));
+    #   Rout = applyGeometricTransformToSpatialRef(RA, tform);
+    #   Rout.ImageSize = RA.ImageSize;
+    #   Rout limits are shifted to preserve the center;
+    #   imwarp(A, tform, 'nearest', 'OutputView', Rout)
+    # Default imref2d world limits are [0.5, size + 0.5].
+    x_limits = (0.5, w + 0.5)
+    y_limits = (0.5, h + 0.5)
+    corners = np.array(
+        [
+            [x_limits[0], y_limits[0]],
+            [x_limits[0], y_limits[1]],
+            [x_limits[1], y_limits[0]],
+            [x_limits[1], y_limits[1]],
+        ],
+        dtype=np.float64,
+    )
+    x_out = corners[:, 0] * cos_a + corners[:, 1] * sin_a
+    y_out = -corners[:, 0] * sin_a + corners[:, 1] * cos_a
+    x_trans = (float(np.min(x_out)) + float(np.max(x_out))) / 2.0 - (
+        x_limits[0] + x_limits[1]
+    ) / 2.0
+    y_trans = (float(np.min(y_out)) + float(np.max(y_out))) / 2.0 - (
+        y_limits[0] + y_limits[1]
+    ) / 2.0
+    x_world_min = x_limits[0] + x_trans
+    y_world_min = y_limits[0] + y_trans
+
+    # MATLAB's imwarp path lands infinitesimally below exact half-pixel
+    # boundaries for the observed tie cases. Nudge the crop reference down
+    # by two ULPs so nearest-neighbor rounding follows the same side.
+    x_world_min = np.nextafter(np.nextafter(x_world_min, -np.inf), -np.inf)
+    y_world_min = np.nextafter(np.nextafter(y_world_min, -np.inf), -np.inf)
+
+    rows, cols = np.indices((h, w), dtype=np.float64)
+    x_world = x_world_min + (cols + 1.0 - 0.5)
+    y_world = y_world_min + (rows + 1.0 - 0.5)
+
+    # transformPointsInverse for affine2d rotation matrix
+    # [cos -sin 0; sin cos 0; 0 0 1], then worldToIntrinsic(RA).
+    # With default RA limits and unit pixel extents, world == intrinsic.
+    x_in = x_world * cos_a - y_world * sin_a
+    y_in = x_world * sin_a + y_world * cos_a
 
     # MATLAB round: ties away from zero (works for negative too).
     x_idx = (np.sign(x_in) * np.floor(np.abs(x_in) + 0.5)).astype(np.int64)

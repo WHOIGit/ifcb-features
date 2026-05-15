@@ -12,7 +12,8 @@ from .blobs import find_blobs, rotate_blob, blob_shape
 from .blob_geometry import (equiv_diameter, ellipse_properties,
                             invmoments, convex_hull, convex_hull_image,
                             convex_hull_properties, feret_diameter,
-                            binary_symmetry, feret_diameters)
+                            binary_symmetry, feret_diameters,
+                            explicit_orientation)
 from .morphology import find_perimeter
 from .biovolume import (distmap_volume_surface_area,
                         sor_volume_surface_area)
@@ -151,13 +152,7 @@ class BlobFeatures(object):
     @lru_cache()
     def orientation(self):
         """return orientation of blob in degrees"""
-        # skimage.regionprops.orientation is angle between the 0th axis (rows)
-        # and the major axis. MATLAB uses angle from the x-axis (columns).
-        rad = self.regionprops.orientation
-        deg = 90.0 + (180.0 / np.pi) * rad
-        if deg > 90.0:
-            deg -= 180.0
-        return deg
+        return explicit_orientation(self.image)
     @property
     @lru_cache()
     def centroid(self):
