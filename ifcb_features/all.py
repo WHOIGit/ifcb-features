@@ -1,8 +1,9 @@
 import numpy as np
 
 from scipy.ndimage.measurements import find_objects
+from scipy.spatial import QhullError
 
-from skimage.measure import regionprops
+from skimage.measure import label, regionprops
 
 from functools import lru_cache
 
@@ -11,11 +12,12 @@ from .blobs import find_blobs, rotate_blob, blob_shape
 from .blob_geometry import (equiv_diameter, ellipse_properties,
                             invmoments, convex_hull, convex_hull_image,
                             convex_hull_properties, feret_diameter,
-                            binary_symmetry, feret_diameters)
+                            binary_symmetry, feret_diameters,
+                            explicit_orientation)
 from .morphology import find_perimeter
 from .biovolume import (distmap_volume_surface_area,
                         sor_volume_surface_area)
-from .perimeter import perimeter_stats, hausdorff_symmetry
+from .perimeter import perimeter_stats, hausdorff_symmetry, benkrid_perimeter
 from .texture import statxture, masked_pixels, texture_pixels
 from .hog import image_hog
 from .ringwedge import ring_wedge, _N_RINGS, _N_WEDGES
@@ -43,8 +45,13 @@ class BlobFeatures(object):
     @property
     @lru_cache()
     def regionprops(self):
-        """region props of the blob (assumes single connected region)"""
-        return regionprops(self.image.astype(np.uint8))[0]
+        """region props of the blob (assumes single connected region)."""
+        labels = label(self.image.astype(np.uint8), connectivity=2)
+        props = regionprops(labels)
+        if not props:
+            return None
+        # Use the largest region to match MATLAB's 8-connected component.
+        return max(props, key=lambda p: p.area)
     @property
     @lru_cache()
     def area(self):
@@ -58,7 +65,7 @@ class BlobFeatures(object):
     @property
     @lru_cache()
     def perimeter(self):
-        return self.regionprops.perimeter
+        return benkrid_perimeter(self.perimeter_image)
     @property
     def area_over_perimeter_squared(self):
         return self.area / self.perimeter**2
@@ -74,11 +81,20 @@ class BlobFeatures(object):
     @lru_cache()
     def convex_hull(self):
         """vertices of convex hull of blob"""
-        return convex_hull(self.perimeter_points)
+        try:
+            return convex_hull(self.perimeter_points)
+        except QhullError:
+            # Colinear or degenerate perimeter points; fall back to raw points.
+            return np.vstack(self.perimeter_points).T
     @property
     @lru_cache()
     def convex_hull_properties(self):
-        return convex_hull_properties(self.convex_hull)
+        hull = self.convex_hull
+        if hull is None or hull.shape[0] < 3:
+            return self.perimeter, self.area
+        if np.linalg.matrix_rank(hull - hull[0]) < 2:
+            return self.perimeter, self.area
+        return convex_hull_properties(hull)
     @property
     @lru_cache()
     def convex_perimeter(self):
@@ -136,11 +152,7 @@ class BlobFeatures(object):
     @lru_cache()
     def orientation(self):
         """return orientation of blob in degrees"""
-        rad = self.ellipse_properties[3]
-        deg = (180/np.pi) * rad - 90
-        if deg < -90:
-            deg += 180
-        return deg
+        return explicit_orientation(self.image)
     @property
     @lru_cache()
     def centroid(self):
@@ -190,7 +202,19 @@ class BlobFeatures(object):
     @lru_cache()
     def distmap_volume_surface_area(self):
         """volume of blob computed via Moberg & Sosik algorithm"""
-        return distmap_volume_surface_area(self.image, self.perimeter_image)
+        # MATLAB uses a tight cropped blob image for distmap via regionprops.Image.
+        img = self.regionprops.image.astype(bool)
+        # Match MATLAB blob_geomprop: use largest 8-connected component.
+        if img.any():
+            from scipy.ndimage import label
+            labeled, num = label(img, structure=np.ones((3, 3), dtype=np.int32))
+            if num > 1:
+                counts = np.bincount(labeled.ravel())
+                counts[0] = 0
+                largest = counts.argmax()
+                img = labeled == largest
+        perim = find_perimeter(img)
+        return distmap_volume_surface_area(img, perim)
     @property
     @lru_cache()
     def sor_volume_surface_area(self):
@@ -312,8 +336,7 @@ class RoiFeatures(object):
         the segmented mask, ordered by largest area to smallest area"""
         labeled, bboxes, blobs = find_blobs(self.blobs_image)
         cropped_rois = [self.image[bbox] for bbox in bboxes]
-        # ignore 1-pixel wide/high blobs
-        Bs = [BlobFeatures(b,R) for b,R in zip(blobs,cropped_rois) if min(R.shape) > 1]
+        Bs = [BlobFeatures(b, R) for b, R in zip(blobs, cropped_rois)]
         # sort by area, largest first
         return sorted(Bs, key=lambda B: B.area, reverse=True)
     @property
@@ -422,7 +445,9 @@ class RoiFeatures(object):
         return self.ring_wedge[3]
     @lru_cache()
     def summed_attr(self, attr):
-        return np.sum(getattr(b,attr) for b in self.blobs)
+        vals = np.array([getattr(b, attr) for b in self.blobs], dtype=np.float64)
+        # MATLAB stores blob props in double arrays and sums in double.
+        return float(np.sum(vals, dtype=np.float64))
     @property
     def summed_area(self):
         return self.summed_attr('area')
@@ -504,9 +529,11 @@ def compute_features(roi_image, blobs_image=None, raw_stitch=None):
         ('summedPerimeter', r.summed_perimeter),
         ('summedSurfaceArea', r.summed_surface_area),
     ]
+    def _zero_to_nan(v):
+        return float('nan') if v == 0 else v
     f += [
-        ('Area_over_PerimeterSquared', b.area_over_perimeter_squared),
-        ('Area_over_Perimeter', b.area_over_perimeter),
-        ('summedConvexPerimeter_over_Perimeter', r.summed_convex_perimeter_over_perimeter),
+        ('Area_over_PerimeterSquared', _zero_to_nan(b.area_over_perimeter_squared)),
+        ('Area_over_Perimeter', _zero_to_nan(b.area_over_perimeter)),
+        ('summedConvexPerimeter_over_Perimeter', _zero_to_nan(r.summed_convex_perimeter_over_perimeter)),
     ]
     return (r.blobs_image, f)

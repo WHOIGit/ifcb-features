@@ -1,6 +1,6 @@
 import numpy as np
 
-from scipy.ndimage import distance_transform_edt
+from scipy.ndimage import binary_fill_holes, distance_transform_edt
 
 from .morphology import find_perimeter
 
@@ -44,60 +44,84 @@ def bottom_top_area(X,Y,Z,ignore_ground=False):
         
     return area_bot, area_top
 
-def distmap_volume_surface_area(B,perimeter_image=None):
-    """Moberg & Sosik biovolume algorithm
-    returns volume and representative transect"""
+def _det_sum32(arr):
+    """Deterministic float32 sum in column-major order."""
+    sum_acc = np.float32(0.0)
+    flat = arr.ravel(order="F")
+    for v in flat:
+        sum_acc = np.float32(sum_acc + np.float32(v))
+    return np.float32(sum_acc)
+
+
+def distmap_volume_surface_area(B, perimeter_image=None):
+    """Moberg & Sosik biovolume algorithm (Heidi_explore implementation).
+    Returns volume, representative transect, and surface area."""
     if perimeter_image is None:
         perimeter_image = find_perimeter(B)
-    # elementwise distance to perimeter + 1
-    D = distance_transform_edt(1-perimeter_image) + 1
-    # mask distances outside blob
-    D = D * (B>0)
-    Dm = np.ma.array(D,mask=1-B)
-    # representative transect
-    x = 4 * np.ma.mean(Dm) - 2
-    # diamond correction
-    c1 = x**2 / (x**2 + 2*x + 0.5)
-    # circle correction
-    # c2 = np.pi / 2 
-    # volume = c1 * c2 * 2 * np.sum(D)
-    volume = c1 * np.pi * np.sum(D)
+    # calculate distance map (MATLAB bwdist)
+    D = distance_transform_edt(1 - perimeter_image) + 1
+    # mask distances outside filled perimeter
+    fill = binary_fill_holes(np.array(perimeter_image, dtype=bool))
+    D = D.astype(np.float64)
+    D[~fill] = np.nan
+    # deterministic sum/mean over column-major order to match MATLAB loop
+    flat = D.ravel(order="F")
+    sum_acc = np.float32(0.0)
+    cnt = 0
+    for v in flat:
+        if not np.isnan(v):
+            sum_acc = np.float32(sum_acc + np.float32(v))
+            cnt += 1
+    sum_val = np.float32(sum_acc)
+    mean_val = np.float32(sum_acc / np.float32(cnt)) if cnt else np.float32(np.nan)
+    # representative transect length
+    x = np.float32(4.0) * mean_val - np.float32(2.0)
+    # correction factors
+    c1 = (x**2) / (x**2 + np.float32(2.0) * x + np.float32(0.5))
+    c2 = np.float32(np.pi / 2.0)
+    volume = np.float32(c1 * c2 * np.float32(2.0) * sum_val)
     # surface area
-    h, w = D.shape
-    Y, X = np.mgrid[0:h,0:w]
-    area_bot, area_top = bottom_top_area(X,Y,D,ignore_ground=True)
-    # final correction of the diamond cross-section
-    # inherent in the distance map to be circular instead
-    c = (np.pi * x / 2) / (2 * np.sqrt(2) * x / 2 + (1 + np.sqrt(2)) / 2)
-    sa = 2 * c * (np.sum(area_bot) + np.sum(area_top))
-    # return volume, representative transect, and surface area
+    D_sa = np.nan_to_num(D, nan=0.0).astype(np.float32, copy=False)
+    h, w = D_sa.shape
+    Y, X = np.mgrid[1:h + 1, 1:w + 1]
+    X = X.astype(np.float32, copy=False)
+    Y = Y.astype(np.float32, copy=False)
+    area_bot, area_top = bottom_top_area(X, Y, D_sa, ignore_ground=True)
+    # compute c fully in float32 to match MATLAB single-precision path
+    c = (np.float32(np.pi) * np.float32(x) / np.float32(2.0)) / (
+        np.float32(2.0) * np.float32(np.sqrt(2.0)) * np.float32(x) / np.float32(2.0)
+        + (np.float32(1.0) + np.float32(np.sqrt(2.0))) / np.float32(2.0)
+    )
+    sum_bot = _det_sum32(area_bot.astype(np.float32))
+    sum_top = _det_sum32(area_top.astype(np.float32))
+    sa = np.float32(2.0) * np.float32(c) * np.float32(sum_bot + sum_top)
     return volume, x, sa
 
 def sor_volume_surface_area(B):
     """pass in rotated blob"""
     """Sosik and Kilfoyle surface area / volume algorithm"""
-    # find the bottom point of the circle for each column
-    m = np.argmax(B,axis=0)
-    # compute the radius of each slice
-    d = np.sum(B,axis=0)
-    # exclude 0s
-    r = (d/2.)[d>0]
-    m = m[d>0]
+    # compute center as top-edge + radius to match MATLAB
+    r = np.sum(B, axis=0).astype(np.float64)
+    ri = r > 0
+    r = (r / 2.0)[ri]
+    y1 = np.argmax(B, axis=0).astype(np.float64) + 1.0
+    y1 = y1[ri]
+    center = y1 + r
     n_slices = r.size
-    # compute 721 angles between 0 and 180 degrees inclusive, in radians
-    n_angles = 721
-    angR = np.linspace(0,180,n_angles) * (np.pi / 180)
+    # compute angles between 0 and 180 degrees inclusive, in radians
+    da = 0.25
+    angvec = np.arange(0, 180 + da / 2, da, dtype=np.float64)
+    n_angles = angvec.size
+    angR = angvec * (np.pi / 180)
     
     # make everything the same shape: (nslices, nangles)
-    angR = np.vstack([angR] * m.size)
-    m = np.vstack([m] * n_angles).T
+    angR = np.vstack([angR] * n_slices)
     r = np.vstack([r] * n_angles).T
-    
-    # compute the center of each slice
-    center = m + r
+    center = np.vstack([center] * n_angles).T
     # correct for edge effects
-    center[0,:]=center[1,:]
-    center[-1,:]=center[-2,:]
+    if n_slices >= 2:
+        center[0, :] = center[1, :]
+        center[-1, :] = center[-2, :]
     
     # y coordinates of all angles on all slices
     Y = center + np.cos(angR) * r

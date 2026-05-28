@@ -6,6 +6,8 @@ from scipy import stats
 
 from skimage.measure import regionprops
 
+from scipy.ndimage import convolve
+
 from .morphology import find_perimeter
 from .random import simple_prng
 
@@ -17,6 +19,23 @@ def hist_stats(arr):
     skewness = stats.skew(arr)
     kurtosis = stats.kurtosis(arr,fisher=False)
     return mean, median, skewness, kurtosis
+
+
+def benkrid_perimeter(border_image):
+    """Perimeter estimator matching MATLAB benkrid_perimeter."""
+    weights = np.zeros(50, dtype=np.float64)
+    weights[[5, 7, 15, 17, 25, 27]] = 1.0
+    weights[[21, 33]] = np.sqrt(2)
+    weights[[13, 23]] = (1 + np.sqrt(2)) / 2
+
+    kernel = np.array([[10, 2, 10],
+                       [2, 1, 2],
+                       [10, 2, 10]], dtype=np.float64)
+
+    coded = convolve(border_image.astype(np.float64), kernel, mode='constant', cval=0.0)
+    coded = coded.astype(np.int64)
+    coded = np.clip(coded, 0, weights.size - 1)
+    return float(np.sum(weights[coded]))
 
 def subsample_dist(A,max_n=10000):
     """subsampling version of pdist"""
