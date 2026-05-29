@@ -19,7 +19,7 @@ computed here are comparable with historical IFCB datasets.
 
 ## Installation
 
-The package targets Python 3.7+ and depends on `numpy`, `scipy`,
+The package targets Python 3.10+ and depends on `numpy`, `scipy`,
 `scikit-image`, and `scikit-learn`, plus two WHOI packages installed directly
 from GitHub ([`pyifcb`](https://github.com/joefutrelle/pyifcb) for reading IFCB
 data and [`phasepack`](https://github.com/WHOIGit/phasepack) for phase
