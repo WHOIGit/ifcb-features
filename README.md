@@ -55,7 +55,8 @@ python extract_slim_features.py <data_directory> <output_directory> [--bins BIN1
 For each sample this produces two files in the output directory:
 
 - `<bin>_features_v4.csv` — one row per ROI, with a `roi_number` column and one
-  column per feature.
+  column per feature. See [FEATURES.md](FEATURES.md) for a description of each
+  feature.
 - `<bin>_blobs_v4.zip` — the segmented blob masks, one 1-bit PNG per ROI.
 
 ### Docker
