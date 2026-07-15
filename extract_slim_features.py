@@ -1,6 +1,6 @@
 import argparse
 import csv
-from ifcb import DataDirectory
+from ifcbkit import SyncIfcbDataDirectory, parse_pid
 from ifcb_features import RoiFeatures
 import os
 import pandas as pd
@@ -57,11 +57,11 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None):
         bins (list, optional): A list of bin names (e.g., 'D20240423T115846_IFCB127') to process.
             If None, all bins in the data directory are processed. Defaults to None.
     """
-    try:
-        data_dir = DataDirectory(data_directory)
-    except FileNotFoundError:
+    if not os.path.isdir(data_directory):
         print(f"Error: Data directory not found at '{data_directory}'.")
         return
+    try:
+        data_dir = SyncIfcbDataDirectory(data_directory)
     except Exception as e:
         print(f"Error loading data directory: {e}")
         return
@@ -72,27 +72,28 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None):
         print(f"Error creating output directory '{output_directory}': {e}")
         return
 
-    samples_to_process = []
+    pids_to_process = []
     if bins:
         for bin_name in bins:
             try:
-                sample = data_dir[bin_name]
-                samples_to_process.append(sample)
-            except KeyError:
-                print(f"Warning: Bin '{bin_name}' not found in data directory. Skipping.")
+                if data_dir.exists(bin_name):
+                    pids_to_process.append(bin_name)
+                else:
+                    print(f"Warning: Bin '{bin_name}' not found in data directory. Skipping.")
             except Exception as e:
                 print(f"Error accessing bin '{bin_name}': {e}")
                 traceback.print_exc()
     else:
-        for sample in data_dir:
-            samples_to_process.append(sample)
+        for fileset in data_dir.list():
+            pids_to_process.append(fileset['pid'])
 
-    for sample in samples_to_process:
+    for pid in pids_to_process:
+        lid = parse_pid(pid)['lid']
         all_features = []
         all_blobs = {}
-        features_output_filename = os.path.join(output_directory, f"{sample.lid}_features_v4.csv")
-        blobs_output_filename = os.path.join(output_directory, f"{sample.lid}_blobs_v4.zip")
-        for number, image in sample.images.items():
+        features_output_filename = os.path.join(output_directory, f"{lid}_features_v4.csv")
+        blobs_output_filename = os.path.join(output_directory, f"{lid}_blobs_v4.zip")
+        for number, image in data_dir.read_images(pid).items():
             features = {
                 'roi_number': number,
             }
@@ -104,18 +105,18 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None):
                 Image.fromarray((blobs_image > 0).astype(np.uint8) * 255).save(img_buffer, format="PNG")
                 all_blobs[number] = img_buffer.getvalue()
             except Exception as e:
-                print(f"Error processing ROI {number} in sample {sample.pid}: {e}")
+                print(f"Error processing ROI {number} in sample {pid}: {e}")
 
             all_features.append(features)
 
         if all_features:
             df = pd.DataFrame.from_records(all_features, columns=['roi_number'] + FEATURE_COLUMNS)
             df.to_csv(features_output_filename, index=False, float_format="%.10g")
-        
+
         if all_blobs:
             with zipfile.ZipFile(blobs_output_filename, 'w') as zf:
                 for roi_number, blob_data in all_blobs.items():
-                    filename = f"{sample.lid}_{roi_number:05d}.png"
+                    filename = f"{lid}_{roi_number:05d}.png"
                     zf.writestr(filename, blob_data)
 
 if __name__ == "__main__":
