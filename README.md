@@ -21,7 +21,7 @@ computed here are comparable with historical IFCB datasets.
 
 The package targets Python 3.10+ and depends on `numpy`, `scipy`,
 `scikit-image`, and `scikit-learn`, plus two WHOI packages installed directly
-from GitHub ([`pyifcb`](https://github.com/joefutrelle/pyifcb) for reading IFCB
+from GitHub ([`ifcbkit`](https://github.com/WHOIGit/ifcbkit) for reading IFCB
 data and [`phasepack`](https://github.com/WHOIGit/phasepack) for phase
 congruency used during segmentation).
 
@@ -40,14 +40,14 @@ pip install -e .
 ## Usage
 
 The main entry point is [`extract_slim_features.py`](extract_slim_features.py).
-It reads whole IFCB bins (via `pyifcb`), computes the per-ROI feature set, and
+It reads whole IFCB bins (via `ifcbkit`), computes the per-ROI feature set, and
 writes the results to disk:
 
 ```bash
 python extract_slim_features.py <data_directory> <output_directory> [--bins BIN1 BIN2 ...]
 ```
 
-- `data_directory` — directory of IFCB data (read via `pyifcb`).
+- `data_directory` — directory of IFCB data (read via `ifcbkit`).
 - `output_directory` — where the outputs are written.
 - `--bins` — optional list of bin names (e.g. `D20240423T115846_IFCB127`) to
   process; if omitted, every bin in the data directory is processed.
