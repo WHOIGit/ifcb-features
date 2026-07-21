@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ifcb-features"
-version = "0.1.1"
+version = "1.1.0"
 description = "IFCB feature extraction tools"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
     { name = "Joe Futrelle", email = "jfutrelle@whoi.edu" }
@@ -18,9 +18,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Topic :: Scientific/Engineering :: Image Processing",
 ]
@@ -30,7 +27,7 @@ dependencies = [
     "scikit-image",
     "phasepack @ git+https://github.com/WHOIGit/phasepack@v1.6.1",
     "scikit-learn",
-    "pyifcb @ git+https://github.com/joefutrelle/pyifcb@v1.2.1"
+    "ifcbkit @ git+https://github.com/joefutrelle/ifcbkit@v0.2.1"
 ]
 
 [project.urls]
