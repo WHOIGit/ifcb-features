@@ -23,6 +23,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy",
+    "pandas",
     "scipy",
     "scikit-image",
     "phasepack @ git+https://github.com/WHOIGit/phasepack@v1.6.1",
