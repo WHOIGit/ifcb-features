@@ -1,5 +1,6 @@
 import argparse
 import csv
+import warnings
 from ifcbkit import SyncIfcbDataDirectory, parse_pid
 from ifcb_features import RoiFeatures
 import os
@@ -12,6 +13,22 @@ from PIL import Image
 import traceback
 
 from ifcb_features.all import compute_features
+
+
+def configure_output(verbose):
+    """Quiet by default: suppress the library's skimage/numpy warnings and
+    silence numpy divide/invalid errors. --verbose restores everything."""
+    if verbose:
+        return
+    warnings.filterwarnings("ignore", category=FutureWarning)
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
+    # numpy ComplexWarning (all.py:448) — location moved across numpy versions
+    for exc in (getattr(np, "ComplexWarning", None),
+                getattr(getattr(np, "exceptions", None), "ComplexWarning", None)):
+        if exc is not None:
+            warnings.filterwarnings("ignore", category=exc)
+    np.seterr(divide="ignore", invalid="ignore")
 
 FEATURE_COLUMNS = [
     'Area',
@@ -46,7 +63,7 @@ FEATURE_COLUMNS = [
     'summedConvexPerimeter_over_Perimeter' 
 ]
 
-def extract_and_save_all_features(data_directory, output_directory, bins=None):
+def extract_and_save_all_features(data_directory, output_directory, bins=None, verbose=False):
     """
     Extracts slim features from IFCB images in the given directory
     and saves them to a CSV file.
@@ -105,7 +122,8 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None):
                 Image.fromarray((blobs_image > 0).astype(np.uint8) * 255).save(img_buffer, format="PNG")
                 all_blobs[number] = img_buffer.getvalue()
             except Exception as e:
-                print(f"Error processing ROI {number} in sample {pid}: {e}")
+                if verbose:
+                    print(f"Error processing ROI {number} in sample {pid}: {e}")
 
             all_features.append(features)
 
@@ -124,11 +142,15 @@ if __name__ == "__main__":
     parser.add_argument("data_directory", help="Path to the directory containing IFCB data.")
     parser.add_argument("output_directory", help="Path to the directory to save the output CSV file and blobs.")
     parser.add_argument("--bins", nargs='+', help="List of bin names to process (space-separated). If not provided, all bins are processed.")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Emit per-ROI error messages and library warnings (skimage/numpy). Quiet by default.")
 
     args = parser.parse_args()
 
+    configure_output(args.verbose)
+
     beginning = time.time()
-    extract_and_save_all_features(args.data_directory, args.output_directory, args.bins)
+    extract_and_save_all_features(args.data_directory, args.output_directory, args.bins, verbose=args.verbose)
     elapsed = time.time() - beginning
 
-    print(f'Total extract time: {elapsed:.2f} seconds')
+    if args.verbose:
+        print(f'Total extract time: {elapsed:.2f} seconds')
