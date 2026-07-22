@@ -5,7 +5,7 @@ from scipy.ndimage import measurements
 from .morphology import SE2, SE3, EIGHT, bwmorph_thin
 
 def label_blobs(B):
-    B = np.array(B).astype(np.bool)
+    B = np.array(B).astype(bool)
     labeled, _ = measurements.label(B,structure=EIGHT)
     objects = measurements.find_objects(labeled)
     return labeled, objects
@@ -15,7 +15,7 @@ def find_blobs(B):
     eight-connectivity. returns a labeled image, the
     bounding boxes of the blobs, and the blob masks cropped
     to those bounding boxes"""
-    B = np.array(B).astype(np.bool)
+    B = np.array(B).astype(bool)
     labeled, objects = label_blobs(B)
     # Match MATLAB blob_geomprop: sort connected components by area (descending).
     labeled_objects = [(ix + 1, obj) for ix, obj in enumerate(objects)]
@@ -31,7 +31,7 @@ def find_blobs(B):
 
 def center_blob(B):
     """Center blob on centroid, matching MATLAB center_blob.m."""
-    B = np.array(B).astype(np.bool)
+    B = np.array(B).astype(bool)
     # MATLAB uses regionprops centroid (x, y) with 1-based coordinates.
     ys, xs = np.where(B)
     if ys.size == 0:
@@ -43,7 +43,7 @@ def center_blob(B):
     yc = (np.mean(ys) + 1.0) - 1.0
     s = max(yc, h - yc, xc, w - xc)
     m = int(np.ceil(s * 2))
-    C = np.zeros((m, m), dtype=np.bool)
+    C = np.zeros((m, m), dtype=bool)
     # Integer-exact offsets to avoid float drift.
     n = ys.size
     sum_y = int(np.sum(ys))
@@ -69,7 +69,7 @@ def rotate_blob(blob, theta):
 
 def imrotate_nearest_crop(img, angle_deg):
     """MATLAB-compatible imrotate(..., 'nearest', 'crop') for binary masks."""
-    img = np.array(img).astype(np.bool)
+    img = np.array(img).astype(bool)
     h, w = img.shape
 
     # MATLAB blob_rotate calls imrotate(centered, -Orientation, ...).  The
@@ -128,7 +128,7 @@ def imrotate_nearest_crop(img, angle_deg):
     x_idx = (np.sign(x_in) * np.floor(np.abs(x_in) + 0.5)).astype(np.int64)
     y_idx = (np.sign(y_in) * np.floor(np.abs(y_in) + 0.5)).astype(np.int64)
 
-    out = np.zeros_like(img, dtype=np.bool)
+    out = np.zeros_like(img, dtype=bool)
     mask = (x_idx >= 1) & (x_idx <= w) & (y_idx >= 1) & (y_idx <= h)
     out[mask] = img[y_idx[mask] - 1, x_idx[mask] - 1]
     return out

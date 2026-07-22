@@ -14,7 +14,7 @@ def image_hog(image):
     m = np.sqrt(L/2)
 
     # convert to float, retain uint8 range
-    Im = image.astype(np.float)
+    Im = image.astype(float)
 
     step_x = int(np.floor(C/(nwin_x+1)))
     step_y = int(np.floor(L/(nwin_y+1)))

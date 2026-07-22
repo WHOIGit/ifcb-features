@@ -26,7 +26,7 @@ class BlobFeatures(object):
     def __init__(self,blob_image,roi_image):
         """roi_image should be the same size as the blob image,
         so a sub-roi"""
-        self.image = np.array(blob_image).astype(np.bool)
+        self.image = np.array(blob_image).astype(bool)
         self.roi_image = roi_image
     @property
     def shape(self):
