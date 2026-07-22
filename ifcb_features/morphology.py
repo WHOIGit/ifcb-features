@@ -1,6 +1,6 @@
 import numpy as np
 
-from skimage.morphology import binary_dilation, disk, reconstruction
+from skimage.morphology import dilation, disk, reconstruction
 from scipy.ndimage import correlate
 
 EIGHT = np.ones((3,3)).astype(np.bool)
@@ -30,7 +30,7 @@ def hysthresh(img,T1,T2):
     edges = img > T1
     sum = 1
     while sum > 0:
-        bd = (binary_dilation(edges,EIGHT) & (img > T2)) ^ edges
+        bd = (dilation(edges,EIGHT) & (img > T2)) ^ edges
         edges = np.logical_or(bd, edges)
         sum = np.sum(bd)
     return edges
