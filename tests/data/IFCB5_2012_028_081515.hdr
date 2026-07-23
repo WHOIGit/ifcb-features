@@ -1,0 +1,6 @@
+"Imaging FlowCytobot Acquisition Software version 1.0; October 2005"
+"Heidi M. Sosik and Robert J. Olson"
+"Woods Hole Oceanographic Institution"
+"SyringeStatus =  0"
+"Temp Humidity BinarizeThresh PMT1hv(ssc) PMT2hv(chl) BlobSizeThresh"
+" 11.4799732421875"," 32.167437512207"," 30"," .675"," .6"," 10"

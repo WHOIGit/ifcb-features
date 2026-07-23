@@ -78,6 +78,27 @@ You can also build it locally:
 docker build -t ifcb-features .
 ```
 
+## Tests
+
+The test suite is a regression test: it runs the extractor over a small sample
+bin committed in `tests/data` and compares both outputs against a golden
+baseline in `tests/golden` — the features CSV column by column with a numeric
+tolerance, and the blob masks pixel for pixel.
+
+```bash
+pip install -e ".[test]"
+pytest
+```
+
+The baseline is a snapshot of this implementation's own output, not MATLAB
+reference output, so the tests detect drift rather than proving correctness.
+When a numeric change is intended, regenerate the baseline and review the diff
+before committing it:
+
+```bash
+python tests/generate_golden.py
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
