@@ -2,7 +2,7 @@ import numpy as np
 
 from scipy.ndimage import label
 from scipy.ndimage.morphology import binary_fill_holes
-from skimage.morphology import binary_closing, binary_dilation, binary_erosion, diamond
+from skimage.morphology import closing, dilation, erosion, diamond
 import skimage.filters as imfilters
 
 from .phasecong import phasecong_Mm
@@ -159,7 +159,7 @@ def segment_roi(roi, raw_stitch=None):
     # step 1a: for stitched images, chop the raw stitch mask
     # after growing it one pixel
     if raw_stitch is not None:
-        mask = binary_dilation(raw_stitch.mask)
+        mask = dilation(raw_stitch.mask)
         Mm[mask] = 0
     # step 2. hysteresis thresholding (of edges)
     B = hysthresh(Mm,HT_T1,HT_T2)
@@ -170,7 +170,7 @@ def segment_roi(roi, raw_stitch=None):
     B[-1,B[-2,:]==0]=0
     # step 4. binary closing
     padded = np.pad(B, 2)
-    B = binary_closing(padded, SE2)[2:-2,2:-2]
+    B = closing(padded, SE2)[2:-2,2:-2]
     # step 5. morphological thinning
     B = bwmorph_thin(B, 3)
     # step 6. background/foreground thresholding
@@ -179,7 +179,7 @@ def segment_roi(roi, raw_stitch=None):
     # step 7. fill holes (surrounded by target pixels)
     B = binary_fill_holes(B)
     # step 8. erode and remove small blobs
-    B_eroded = binary_erosion(B, SED)
+    B_eroded = erosion(B, SED)
     if np.sum(apply_blob_min(B_eroded)) > 0:
         B = B_eroded
     B = apply_blob_min(B)

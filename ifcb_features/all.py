@@ -61,7 +61,7 @@ class BlobFeatures(object):
     @lru_cache()
     def equiv_diameter(self):
         """equivalent diameter of blob"""
-        return self.regionprops.equivalent_diameter
+        return self.regionprops.equivalent_diameter_area
     @property
     @lru_cache()
     def perimeter(self):
