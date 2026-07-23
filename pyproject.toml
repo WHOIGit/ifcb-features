@@ -28,7 +28,13 @@ dependencies = [
     "scikit-image",
     "phasepack @ git+https://github.com/WHOIGit/phasepack@v1.6.1",
     "scikit-learn",
-    "ifcbkit @ git+https://github.com/joefutrelle/ifcbkit@v0.2.1"
+    "ifcbkit @ git+https://github.com/WHOIGit/ifcbkit@v0.2.1"
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pillow",
 ]
 
 [project.urls]
@@ -46,3 +52,8 @@ include = [
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.pytest.ini_options]
+# extract_slim_features.py lives at the repo root, not in the installed package
+pythonpath = ["."]
+testpaths = ["tests"]
