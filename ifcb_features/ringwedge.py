@@ -43,7 +43,7 @@ def kaccie_ring(i,dim=301,n_rings=_N_RINGS):
     r = np.sqrt(X**2 + Y**2)
     inner_rad = (i / (n_rings-1.)) * (c-3) * df # 50 rings
     outer_rad = (i / (n_rings-1.)) * (c-3) * df + (3 * df) # 50 rings
-    out = np.zeros((dim,dim),dtype=np.bool)
+    out = np.zeros((dim,dim),dtype=bool)
     out[(r > inner_rad) & (r < outer_rad)] = 1
     return out
     
@@ -93,7 +93,7 @@ def ring_wedge(image,dim=_DIM):
     # now mask the intensities for wedge and ring calculations
     wedge_int_trans = int_trans * filt # wedges exclude center
     # only use the bottom half
-    half = np.vstack((np.zeros(((dim//2)+1,dim)), np.ones((dim//2,dim)))).astype(np.bool)
+    half = np.vstack((np.zeros(((dim//2)+1,dim)), np.ones((dim//2,dim)))).astype(bool)
     wedge_half = wedge_int_trans * half
     ring_half = int_trans * half
     # now compute unscaled wedge and ring vectors for all wedges and rings

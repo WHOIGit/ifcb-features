@@ -9,7 +9,7 @@ from skimage.draw import polygon, line
 from skimage.measure import regionprops
 
 def blob_area(B):
-    return np.sum(np.array(B).astype(np.bool))
+    return np.sum(np.array(B).astype(bool))
     
 def blob_extent(B,area=None):
     if area is None:
@@ -46,7 +46,7 @@ def ellipse_properties(B):
 
 def explicit_orientation(B):
     """Deterministic blob orientation in degrees for MATLAB/Python parity."""
-    B = np.array(B).astype(np.bool)
+    B = np.array(B).astype(bool)
     rows, cols = np.indices(B.shape, dtype=np.float64)
     x = (cols + 1.0).ravel(order='C')
     y = (rows + 1.0).ravel(order='C')
@@ -185,7 +185,7 @@ def feret_diameter(hull):
 def convex_hull_image(hull,shape):
     """this can also be computed using
     skimage.measure.regionprops"""
-    chi = np.zeros(shape,dtype=np.bool)
+    chi = np.zeros(shape,dtype=bool)
     # points in the convex hull
     y, x = polygon(hull[:,0], hull[:,1])
     chi[y,x] = 1
