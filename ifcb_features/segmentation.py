@@ -1,7 +1,6 @@
 import numpy as np
 
-from scipy.ndimage import label
-from scipy.ndimage.morphology import binary_fill_holes
+from scipy.ndimage import binary_fill_holes, label
 from skimage.morphology import closing, dilation, erosion, diamond
 import skimage.filters as imfilters
 

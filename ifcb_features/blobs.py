@@ -1,13 +1,13 @@
 import numpy as np
 
-from scipy.ndimage import measurements
+from scipy.ndimage import find_objects, label
 
 from .morphology import SE2, SE3, EIGHT, bwmorph_thin
 
 def label_blobs(B):
     B = np.array(B).astype(bool)
-    labeled, _ = measurements.label(B,structure=EIGHT)
-    objects = measurements.find_objects(labeled)
+    labeled, _ = label(B, structure=EIGHT)
+    objects = find_objects(labeled)
     return labeled, objects
     
 def find_blobs(B):

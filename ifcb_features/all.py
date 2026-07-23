@@ -1,6 +1,6 @@
 import numpy as np
 
-from scipy.ndimage.measurements import find_objects
+from scipy.ndimage import find_objects
 from scipy.spatial import QhullError
 
 from skimage.measure import label, regionprops
