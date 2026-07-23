@@ -1,6 +1,6 @@
 import numpy as np
 
-from numpy.linalg import eig
+from numpy.linalg import eigh
 
 from scipy.spatial import ConvexHull
 from scipy.spatial.distance import pdist
@@ -26,11 +26,18 @@ def ellipse_properties(B):
     # magnitudes and orthonormal basis vectors
     # are computed via the eigendecomposition of
     # the covariance matrix of the coordinates
-    eVal, eVec,  = eig(np.cov(P))
+    # the covariance matrix is symmetric, so use eigh rather than the general
+    # eig: eigh returns real eigenvalues, where eig returns a complex dtype
+    # whose imaginary parts are zero here but which propagates into the
+    # measurements and out into the feature CSV
+    eVal, eVec,  = eigh(np.cov(P))
 
     # axes lengths are 4x the sqrt of the eigenvalues,
-    # major and minor lenghts are max, min of them
-    L = 4 * np.sqrt(eVal)
+    # major and minor lenghts are max, min of them.
+    # the covariance matrix is positive semidefinite, so its eigenvalues are
+    # non-negative in exact arithmetic; clip to guard against small negative
+    # values from rounding, which real sqrt would turn into NaN
+    L = 4 * np.sqrt(np.clip(eVal, 0, None))
     maj_axis, min_axis = np.max(L), np.min(L)
 
     # orientation is derived from the major axis's
@@ -38,8 +45,10 @@ def ellipse_properties(B):
     x,y = eVec[:, np.argmax(L)]
     orientation = np.arctan(y/x)
     
-    # eccentricity = 1st eccentricity
-    ecc = np.sqrt(1-(min_axis/maj_axis)**2)
+    # eccentricity = 1st eccentricity.
+    # for a near-circular blob the ratio can round to slightly more than 1,
+    # making the radicand slightly negative; clip for the same reason as above
+    ecc = np.sqrt(np.clip(1-(min_axis/maj_axis)**2, 0, None))
     
     return maj_axis, min_axis, ecc, orientation
 

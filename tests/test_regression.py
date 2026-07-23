@@ -43,25 +43,11 @@ RTOL = 1e-5
 ATOL = 1e-8
 
 
-def _to_complex(value):
-    """Parse one CSV cell into a complex number.
-
-    Some columns (Eccentricity, MajorAxisLength, MinorAxisLength) are currently
-    written as complex literals such as '(0.888+0j)'. Parsing everything as
-    complex makes the comparison indifferent to that representation, so if those
-    columns are later changed to emit plain floats the values still compare
-    equal rather than failing spuriously.
-    """
-    if value is None or (isinstance(value, float) and np.isnan(value)):
-        return complex(np.nan, 0)
-    return complex(str(value).strip())
-
-
 def _read_features(path):
-    """Read a features CSV as {column: complex128 array}, preserving order."""
+    """Read a features CSV as {column: float64 array}, preserving order."""
     df = pd.read_csv(path, dtype=str)
     return df.columns.tolist(), {
-        column: np.array([_to_complex(v) for v in df[column]], dtype=np.complex128)
+        column: df[column].astype(np.float64).to_numpy()
         for column in df.columns
     }
 
@@ -128,7 +114,7 @@ def test_numeric_column_matches_golden(features, column):
     p, g = produced[column], golden[column]
     close = np.isclose(p, g, rtol=RTOL, atol=ATOL, equal_nan=True)
     if not close.all():
-        rois = produced['roi_number'].real.astype(int)
+        rois = produced['roi_number'].astype(int)
         detail = '\n'.join(
             f'  roi {rois[i]}: produced={p[i]} golden={g[i]}'
             for i in np.flatnonzero(~close)
