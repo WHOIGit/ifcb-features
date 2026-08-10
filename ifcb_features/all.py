@@ -491,14 +491,9 @@ class ZeroMock(object):
     def __getattr__(self, name):
         return 0
 
-def compute_features(roi_image, blobs_image=None, raw_stitch=None):
-    r = RoiFeatures(roi_image, blobs_image, raw_stitch=raw_stitch)
-    if r.num_blobs > 0:
-        b = r.blobs[0]
-    else:
-        b = ZeroMock()
-    f = []
-    f += [
+def _blob_features(b):
+    """Extract per-blob features from a BlobFeatures object."""
+    return [
         ('Area', b.area),
         ('Biovolume', b.biovolume),
         ('BoundingBox_xwidth', b.bbox_xwidth),
@@ -516,8 +511,19 @@ def compute_features(roi_image, blobs_image=None, raw_stitch=None):
         ('Solidity', b.solidity),
         ('SurfaceArea', b.surface_area),
         ('maxFeretDiameter', b.max_feret_diameter),
-        ('minFeretDiameter', b.min_feret_diameter)
+        ('minFeretDiameter', b.min_feret_diameter),
     ]
+
+BLOB_FEATURE_COLUMNS = [name for name, _ in _blob_features(ZeroMock())]
+
+def compute_features(roi_image, blobs_image=None, raw_stitch=None):
+    r = RoiFeatures(roi_image, blobs_image, raw_stitch=raw_stitch)
+    if r.num_blobs > 0:
+        b = r.blobs[0]
+    else:
+        b = ZeroMock()
+    f = []
+    f += _blob_features(b)
     f += [
         ('numBlobs', r.num_blobs),
         ('summedArea', r.summed_area),
@@ -536,4 +542,12 @@ def compute_features(roi_image, blobs_image=None, raw_stitch=None):
         ('Area_over_Perimeter', _zero_to_nan(b.area_over_perimeter)),
         ('summedConvexPerimeter_over_Perimeter', _zero_to_nan(r.summed_convex_perimeter_over_perimeter)),
     ]
-    return (r.blobs_image, f)
+
+    # Collect per-blob features for multiblob ROIs (numBlobs > 1)
+    multiblob_rows = []
+    if r.num_blobs > 1:
+        for blob_number, blob in enumerate(r.blobs, start=1):
+            row = dict(_blob_features(blob))
+            multiblob_rows.append((blob_number, row))
+
+    return (r.blobs_image, f, multiblob_rows)

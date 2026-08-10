@@ -12,7 +12,7 @@ import time
 from PIL import Image
 import traceback
 
-from ifcb_features.all import compute_features
+from ifcb_features.all import compute_features, BLOB_FEATURE_COLUMNS
 
 
 def configure_output(verbose):
@@ -108,6 +108,7 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None, v
         lid = parse_pid(pid)['lid']
         all_features = []
         all_blobs = {}
+        all_multiblob_rows = []
         features_output_filename = os.path.join(output_directory, f"{lid}_features_v4.csv")
         blobs_output_filename = os.path.join(output_directory, f"{lid}_blobs_v4.zip")
         for number, image in data_dir.read_images(pid).items():
@@ -115,12 +116,17 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None, v
                 'roi_number': number,
             }
             try:
-                blobs_image, roi_features = compute_features(image)
+                blobs_image, roi_features, multiblob_rows = compute_features(image)
                 features.update(roi_features)
 
                 img_buffer = io.BytesIO()
                 Image.fromarray((blobs_image > 0).astype(np.uint8) * 255).save(img_buffer, format="PNG")
                 all_blobs[number] = img_buffer.getvalue()
+
+                for blob_number, blob_feats in multiblob_rows:
+                    row = {'roi_number': number, 'blob_number': blob_number}
+                    row.update(blob_feats)
+                    all_multiblob_rows.append(row)
             except Exception as e:
                 if verbose:
                     print(f"Error processing ROI {number} in sample {pid}: {e}")
@@ -136,6 +142,14 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None, v
                 for roi_number, blob_data in all_blobs.items():
                     filename = f"{lid}_{roi_number:05d}.png"
                     zf.writestr(filename, blob_data)
+
+        if all_multiblob_rows:
+            multiblob_dir = os.path.join(output_directory, 'multiblob')
+            os.makedirs(multiblob_dir, exist_ok=True)
+            multiblob_filename = os.path.join(multiblob_dir, f"{lid}_multiblob_v4.csv")
+            multiblob_columns = ['roi_number', 'blob_number'] + BLOB_FEATURE_COLUMNS
+            mb_df = pd.DataFrame.from_records(all_multiblob_rows, columns=multiblob_columns)
+            mb_df.to_csv(multiblob_filename, index=False, float_format="%.10g")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract various ROI features and save blobs as 1-bit PNGs.")
