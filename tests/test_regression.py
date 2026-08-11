@@ -24,6 +24,7 @@ from extract_slim_features import (
     configure_output,
     extract_and_save_all_features,
 )
+from ifcb_features.all import BLOB_FEATURE_COLUMNS
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(TESTS_DIR, 'data')
@@ -32,6 +33,7 @@ GOLDEN_DIR = os.path.join(TESTS_DIR, 'golden')
 BIN_LID = 'IFCB5_2012_028_081515'
 FEATURES_FILENAME = f'{BIN_LID}_features_v4.csv'
 BLOBS_FILENAME = f'{BIN_LID}_blobs_v4.zip'
+MULTIBLOB_FILENAME = f'{BIN_LID}_multiblob_v4.csv'
 
 # Columns that are exact counts, compared without tolerance.
 EXACT_COLUMNS = ['roi_number', 'numBlobs']
@@ -140,3 +142,54 @@ def test_blob_masks_match_golden(blobs):
             mismatched.append(f'  {name}: {int((p != g).sum())} pixels differ')
     if mismatched:
         pytest.fail('blob masks drifted from golden:\n' + '\n'.join(mismatched))
+
+
+# --- Multiblob tests ---
+
+MULTIBLOB_EXACT_COLUMNS = ['roi_number', 'blob_number']
+MULTIBLOB_APPROX_COLUMNS = [c for c in BLOB_FEATURE_COLUMNS]
+
+
+@pytest.fixture(scope='session')
+def multiblob(produced_dir):
+    produced_path = produced_dir / 'multiblob' / MULTIBLOB_FILENAME
+    golden_path = os.path.join(GOLDEN_DIR, 'multiblob', MULTIBLOB_FILENAME)
+    assert produced_path.is_file(), f'extractor did not write multiblob/{MULTIBLOB_FILENAME}'
+    return (
+        _read_features(str(produced_path)),
+        _read_features(golden_path),
+    )
+
+
+def test_multiblob_columns_match_golden(multiblob):
+    (produced_columns, _), (golden_columns, _) = multiblob
+    assert produced_columns == golden_columns
+    assert produced_columns == ['roi_number', 'blob_number'] + BLOB_FEATURE_COLUMNS
+
+
+def test_multiblob_row_count_matches_golden(multiblob):
+    (_, produced), (_, golden) = multiblob
+    assert len(produced['roi_number']) == len(golden['roi_number'])
+
+
+@pytest.mark.parametrize('column', MULTIBLOB_EXACT_COLUMNS)
+def test_multiblob_exact_column_matches_golden(multiblob, column):
+    (_, produced), (_, golden) = multiblob
+    np.testing.assert_array_equal(produced[column], golden[column])
+
+
+@pytest.mark.parametrize('column', MULTIBLOB_APPROX_COLUMNS)
+def test_multiblob_numeric_column_matches_golden(multiblob, column):
+    (_, produced), (_, golden) = multiblob
+    p, g = produced[column], golden[column]
+    close = np.isclose(p, g, rtol=RTOL, atol=ATOL, equal_nan=True)
+    if not close.all():
+        rois = produced['roi_number'].astype(int)
+        blobs = produced['blob_number'].astype(int)
+        detail = '\n'.join(
+            f'  roi {rois[i]} blob {blobs[i]}: produced={p[i]} golden={g[i]}'
+            for i in np.flatnonzero(~close)
+        )
+        pytest.fail(
+            f'{column} drifted from golden (rtol={RTOL}, atol={ATOL}):\n{detail}'
+        )
