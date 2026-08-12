@@ -63,7 +63,8 @@ FEATURE_COLUMNS = [
     'summedConvexPerimeter_over_Perimeter' 
 ]
 
-def extract_and_save_all_features(data_directory, output_directory, bins=None, verbose=False):
+def extract_and_save_all_features(data_directory, output_directory, bins=None, verbose=False,
+                                   blobs_directory=None):
     """
     Extracts slim features from IFCB images in the given directory
     and saves them to a CSV file.
@@ -73,6 +74,7 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None, v
         output_directory (str): Path to the directory where the CSV file will be saved.
         bins (list, optional): A list of bin names (e.g., 'D20240423T115846_IFCB127') to process.
             If None, all bins in the data directory are processed. Defaults to None.
+        blobs_directory (str, optional): Path to write blob ZIPs. Defaults to output_directory.
     """
     if not os.path.isdir(data_directory):
         print(f"Error: Data directory not found at '{data_directory}'.")
@@ -83,10 +85,15 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None, v
         print(f"Error loading data directory: {e}")
         return
 
+    if blobs_directory is None:
+        blobs_directory = output_directory
+
     try:
         os.makedirs(output_directory, exist_ok=True)
+        if blobs_directory != output_directory:
+            os.makedirs(blobs_directory, exist_ok=True)
     except OSError as e:
-        print(f"Error creating output directory '{output_directory}': {e}")
+        print(f"Error creating output directories: {e}")
         return
 
     pids_to_process = []
@@ -110,7 +117,7 @@ def extract_and_save_all_features(data_directory, output_directory, bins=None, v
         all_blobs = {}
         all_multiblob_rows = []
         features_output_filename = os.path.join(output_directory, f"{lid}_features_v4.csv")
-        blobs_output_filename = os.path.join(output_directory, f"{lid}_blobs_v4.zip")
+        blobs_output_filename = os.path.join(blobs_directory, f"{lid}_blobs_v4.zip")
         for number, image in data_dir.read_images(pid).items():
             features = {
                 'roi_number': number,

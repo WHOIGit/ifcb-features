@@ -13,7 +13,6 @@ Usage:
 
 import argparse
 import os
-import shutil
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -36,17 +35,11 @@ def process_bin(data_directory, output_directory, bin_name, verbose=False):
 
     features_dir = os.path.join(output_directory, 'features', day)
     blobs_dir = os.path.join(output_directory, 'blobs', day)
-    os.makedirs(features_dir, exist_ok=True)
-    os.makedirs(blobs_dir, exist_ok=True)
 
     extract_and_save_all_features(
         data_directory, features_dir, bins=[lid], verbose=verbose,
+        blobs_directory=blobs_dir,
     )
-
-    # Move blobs ZIP from features dir to blobs dir
-    blobs_src = os.path.join(features_dir, f'{lid}_blobs_v4.zip')
-    if os.path.exists(blobs_src):
-        shutil.move(blobs_src, os.path.join(blobs_dir, f'{lid}_blobs_v4.zip'))
 
     return lid
 
