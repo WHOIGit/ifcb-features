@@ -39,25 +39,44 @@ pip install -e .
 
 ## Usage
 
-The main entry point is [`extract_slim_features.py`](extract_slim_features.py).
-It reads whole IFCB bins (via `ifcbkit`), computes the per-ROI feature set, and
-writes the results to disk:
+The main entry point is
+[`extract_features_batch.py`](extract_features_batch.py). It reads IFCB bins
+(via `ifcbkit`), computes the per-ROI feature set in parallel, and writes the
+results into a MATLAB-compatible directory structure:
 
 ```bash
-python extract_slim_features.py <data_directory> <output_directory> [--bins BIN1 BIN2 ...]
+python extract_features_batch.py <data_directory> <output_directory> [--workers 4] [--bins BIN1 BIN2 ...]
 ```
 
 - `data_directory` — directory of IFCB data (read via `ifcbkit`).
-- `output_directory` — where the outputs are written.
+- `output_directory` — root directory for outputs.
+- `--workers` — number of parallel worker processes (default: 4).
 - `--bins` — optional list of bin names (e.g. `D20240423T115846_IFCB127`) to
   process; if omitted, every bin in the data directory is processed.
 
-For each sample this produces two files in the output directory:
+Outputs are organized into day-based subdirectories:
+
+```
+<output_directory>/
+    features/<day>/<bin>_features_v4.csv
+    features/<day>/multiblob/<bin>_multiblob_v4.csv
+    blobs/<day>/<bin>_blobs_v4.zip
+```
 
 - `<bin>_features_v4.csv` — one row per ROI, with a `roi_number` column and one
   column per feature. See [FEATURES.md](FEATURES.md) for a description of each
   feature.
 - `<bin>_blobs_v4.zip` — the segmented blob masks, one 1-bit PNG per ROI.
+- `<bin>_multiblob_v4.csv` — per-blob features for ROIs containing more than one
+  blob, with `roi_number`, `blob_number`, and individual blob measurements.
+
+For simpler use cases that don't need the directory structure,
+[`extract_slim_features.py`](extract_slim_features.py) writes all outputs flat
+into a single directory:
+
+```bash
+python extract_slim_features.py <data_directory> <output_directory> [--bins BIN1 BIN2 ...]
+```
 
 ### Docker
 
