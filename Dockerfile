@@ -11,4 +11,4 @@ RUN uv pip install --system .
 
 ENV OPENBLAS_NUM_THREADS=64 OMP_NUM_THREADS=64 NUMEXPR_NUM_THREADS=64
 
-ENTRYPOINT ["python", "extract_slim_features.py"]
+ENTRYPOINT ["python", "extract_features_batch.py"]
