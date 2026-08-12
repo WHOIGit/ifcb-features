@@ -16,7 +16,7 @@ import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-from ifcbkit import SyncIfcbDataDirectory, parse_pid
+from ifcbkit import SyncIfcbDataDirectory, parse_pid, bin_day_dir
 
 from extract_slim_features import (
     configure_output,
@@ -24,14 +24,9 @@ from extract_slim_features import (
 )
 
 
-def day_dir(lid):
-    """First 9 characters of the bin LID, e.g. 'D20230109'."""
-    return lid[:9]
-
-
 def process_bin(data_directory, output_directory, bin_name, verbose=False):
     lid = parse_pid(bin_name)['lid']
-    day = day_dir(lid)
+    day = bin_day_dir(lid)
 
     features_dir = os.path.join(output_directory, 'features', day)
     blobs_dir = os.path.join(output_directory, 'blobs', day)
