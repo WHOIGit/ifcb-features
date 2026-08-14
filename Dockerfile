@@ -9,7 +9,7 @@ COPY . .
 
 RUN uv pip install --system .
 
-ENV OPENBLAS_NUM_THREADS=64 OMP_NUM_THREADS=64 NUMEXPR_NUM_THREADS=64
+ENV OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 
 # umask 0002 so outputs land group-writable and world-readable (0775 dirs, 0664
 # files) instead of the default 0022 (0755/0644). Docker has no --umask flag, so
