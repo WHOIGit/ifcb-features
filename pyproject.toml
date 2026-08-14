@@ -28,7 +28,7 @@ dependencies = [
     "scikit-image",
     "phasepack @ git+https://github.com/WHOIGit/phasepack@v1.6.1",
     "scikit-learn",
-    "ifcbkit @ git+https://github.com/WHOIGit/ifcbkit@v0.2.2"
+    "ifcbkit @ git+https://github.com/WHOIGit/ifcbkit@v0.3.1"
 ]
 
 [project.optional-dependencies]
